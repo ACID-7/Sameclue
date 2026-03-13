@@ -91,6 +91,7 @@ let evaluationInFlight = false;
 let toastTimeoutId = null;
 let submitInFlight = false;
 let timerIntervalId = null;
+let deadlineTimeoutId = null;
 let disconnectHandlers = [];
 let disconnectRefreshSignature = "";
 
@@ -185,6 +186,10 @@ function clearRoundTimer() {
     window.clearInterval(timerIntervalId);
     timerIntervalId = null;
   }
+  if (deadlineTimeoutId) {
+    window.clearTimeout(deadlineTimeoutId);
+    deadlineTimeoutId = null;
+  }
 }
 
 function updateRoundTimer(deadline) {
@@ -207,6 +212,15 @@ function startRoundTimer(deadline) {
   timerIntervalId = window.setInterval(() => {
     updateRoundTimer(deadline);
   }, 250);
+
+  if (currentRoom?.hostId === playerId && currentRoom?.status === "playing") {
+    const msUntilDeadline = Math.max(0, deadline - Date.now()) + 50;
+    deadlineTimeoutId = window.setTimeout(() => {
+      if (currentRoom && shouldEvaluateRound(currentRoom)) {
+        void evaluateRound(currentRoom);
+      }
+    }, msUntilDeadline);
+  }
 }
 
 function cancelDisconnectHandlers() {
@@ -593,6 +607,10 @@ function handleRoomUpdate(data) {
     return;
   }
 
+  if (data.status !== "playing") {
+    clearRoundTimer();
+  }
+
   if (shouldEvaluateRound(data)) {
     void evaluateRound(data);
   }
@@ -901,7 +919,8 @@ async function goToNextRound() {
     round: (currentRoom.round || 1) + 1,
     resolvedRound: currentRoom.round,
     lastResult: null,
-    roundDeadline: createRoundDeadline()
+    roundDeadline: createRoundDeadline(),
+    activeRoster: getOrderedPlayerIds(currentRoom)
   });
 }
 
