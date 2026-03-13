@@ -216,8 +216,18 @@ function startRoundTimer(deadline) {
   if (currentRoom?.hostId === playerId && currentRoom?.status === "playing") {
     const msUntilDeadline = Math.max(0, deadline - Date.now()) + 50;
     deadlineTimeoutId = window.setTimeout(() => {
+      if (currentRoom?.status === "playing") {
+        renderGame(currentRoom);
+      }
       if (currentRoom && shouldEvaluateRound(currentRoom)) {
         void evaluateRound(currentRoom);
+      }
+    }, msUntilDeadline);
+  } else {
+    const msUntilDeadline = Math.max(0, deadline - Date.now()) + 50;
+    deadlineTimeoutId = window.setTimeout(() => {
+      if (currentRoom?.status === "playing") {
+        renderGame(currentRoom);
       }
     }, msUntilDeadline);
   }
