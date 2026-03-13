@@ -36,6 +36,8 @@ const elements = {
   btnJoinToggle: document.getElementById("btn-join-toggle"),
   btnJoin: document.getElementById("btn-join"),
   btnCopyCode: document.getElementById("btn-copy-code"),
+  btnShareCode: document.getElementById("btn-share-code"),
+  btnReady: document.getElementById("btn-ready"),
   btnStart: document.getElementById("btn-start"),
   btnLeaveLobby: document.getElementById("btn-leave-lobby"),
   btnSubmitClue: document.getElementById("btn-submit-clue"),
@@ -94,6 +96,7 @@ let timerIntervalId = null;
 let deadlineTimeoutId = null;
 let disconnectHandlers = [];
 let disconnectRefreshSignature = "";
+let roomActionInFlight = false;
 
 function showScreen(id) {
   currentScreen = id;
@@ -128,6 +131,24 @@ function savePlayerName() {
   elements.playerName.value = name;
   window.localStorage.setItem(PLAYER_NAME_KEY, name);
   return name;
+}
+
+function setRoomActionState(isBusy) {
+  roomActionInFlight = isBusy;
+  [
+    elements.btnCreate,
+    elements.btnJoin,
+    elements.btnStart,
+    elements.btnNextRound,
+    elements.btnPlayAgain,
+    elements.btnLeaveLobby,
+    elements.btnHome,
+    elements.btnReady
+  ].forEach((button) => {
+    if (button) {
+      button.disabled = isBusy;
+    }
+  });
 }
 
 function generateRoomCode() {
@@ -276,6 +297,7 @@ function resetSession() {
   detachRoomListener();
   cancelDisconnectHandlers();
   clearRoundTimer();
+  setRoomActionState(false);
   roomCode = null;
   playerId = null;
   roomRef = null;
@@ -294,6 +316,8 @@ function renderLobby(data) {
   const players = getOrderedPlayers(data);
   const hostName = getPlayerName(data.hostId, data);
   const isHost = data.hostId === playerId;
+  const allReady = players.length >= MIN_PLAYERS && players.every((player) => player.ready);
+  const meReady = Boolean(data.players?.[playerId]?.ready);
 
   elements.displayRoomCode.textContent = roomCode;
   elements.lobbyPlayerCount.textContent = `${players.length} / ${MAX_PLAYERS}`;
@@ -309,10 +333,14 @@ function renderLobby(data) {
     if (player.id === data.hostId) {
       card.classList.add("host");
     }
+    if (player.ready) {
+      card.classList.add("ready");
+    }
     card.innerHTML = `
       <div class="slot-dot"></div>
       <strong>${player.name}</strong>
       <span class="slot-role">${player.id === playerId ? "You" : "Joined"}${player.id === data.hostId ? " | Host" : ""}</span>
+      <span class="slot-state">${player.ready ? "Ready" : "Waiting"}</span>
     `;
     elements.playerSlots.appendChild(card);
   }
@@ -329,13 +357,17 @@ function renderLobby(data) {
 
   if (players.length < MIN_PLAYERS) {
     elements.lobbyStatus.textContent = "Need at least 2 players to start.";
+  } else if (!allReady) {
+    elements.lobbyStatus.textContent = isHost ? "Waiting for everyone to ready up." : "Mark yourself ready to start.";
   } else if (isHost) {
-    elements.lobbyStatus.textContent = "Lobby is ready. Start whenever you want.";
+    elements.lobbyStatus.textContent = "Everyone is ready. Start the game.";
   } else {
-    elements.lobbyStatus.textContent = "Waiting for the host to start the game.";
+    elements.lobbyStatus.textContent = "All players ready. Waiting for the host.";
   }
 
-  elements.btnStart.classList.toggle("hidden", !(isHost && players.length >= MIN_PLAYERS));
+  elements.btnReady.textContent = meReady ? "Unready" : "Ready Up";
+  elements.btnReady.classList.toggle("hidden", false);
+  elements.btnStart.classList.toggle("hidden", !(isHost && allReady));
 }
 
 function renderGame(data) {
@@ -382,9 +414,14 @@ function renderGame(data) {
   }
 
   const remaining = players.length - submittedCount;
-  elements.waitingCopy.textContent = remaining > 0
-    ? `Waiting for ${remaining} player${remaining === 1 ? "" : "s"}...`
-    : "All clues are in. Resolving round...";
+  const timedOut = Boolean(deadline) && Date.now() >= deadline;
+  if (timedOut) {
+    elements.waitingCopy.textContent = `Time is up. ${submittedCount}/${players.length} clues locked.`;
+  } else if (remaining > 0) {
+    elements.waitingCopy.textContent = `${submittedCount}/${players.length} clues locked. Waiting for ${remaining} player${remaining === 1 ? "" : "s"}...`;
+  } else {
+    elements.waitingCopy.textContent = "All clues are in. Resolving round...";
+  }
 }
 
 function buildLobbyReset(data, overrides = {}) {
@@ -591,6 +628,7 @@ function shouldEvaluateRound(data) {
 function handleRoomUpdate(data) {
   currentRoom = data;
   submitInFlight = false;
+  setRoomActionState(false);
 
   const livePlayers = getOrderedPlayerIds(data);
   void registerDisconnectCleanup();
@@ -690,12 +728,17 @@ async function registerDisconnectCleanup() {
 }
 
 async function createRoom() {
+  if (roomActionInFlight) {
+    return;
+  }
+  setRoomActionState(true);
   const playerName = savePlayerName();
   playerId = generatePlayerId();
   const players = {
     [playerId]: {
       name: playerName,
-      joinedAt: Date.now()
+      joinedAt: Date.now(),
+      ready: true
     }
   };
 
@@ -727,18 +770,25 @@ async function createRoom() {
     if (result.committed) {
       roomCode = candidateCode;
       roomRef = candidateRef;
+      setRoomActionState(false);
       enterRoom();
       return;
     }
   }
 
+  setRoomActionState(false);
   showToast("Could not create a room. Try again.");
 }
 
 async function joinRoom() {
+  if (roomActionInFlight) {
+    return;
+  }
+  setRoomActionState(true);
   const playerName = savePlayerName();
   const code = elements.joinCode.value.trim().toUpperCase();
   if (code.length < 4) {
+    setRoomActionState(false);
     showToast("Enter a valid room code.");
     return;
   }
@@ -747,6 +797,7 @@ async function joinRoom() {
   const snapshot = await get(joinRef);
 
   if (!snapshot.exists()) {
+    setRoomActionState(false);
     showToast("Room not found.");
     return;
   }
@@ -755,10 +806,12 @@ async function joinRoom() {
   const playerOrder = getOrderedPlayerIds(data);
 
   if (data.status !== "lobby") {
+    setRoomActionState(false);
     showToast("This room has already started.");
     return;
   }
   if (playerOrder.length >= MAX_PLAYERS) {
+    setRoomActionState(false);
     showToast("This room is full.");
     return;
   }
@@ -782,7 +835,8 @@ async function joinRoom() {
         ...(room.players || {}),
         [nextPlayerId]: {
           name: playerName,
-          joinedAt: Date.now()
+          joinedAt: Date.now(),
+          ready: false
         }
       },
       scores: {
@@ -795,6 +849,7 @@ async function joinRoom() {
   const nextRoom = result.snapshot.val();
   const joined = Boolean(nextRoom?.players?.[nextPlayerId]);
   if (!result.committed || !joined) {
+    setRoomActionState(false);
     showToast(nextRoom?.status === "lobby" ? "This room is full." : "This room has already started.");
     return;
   }
@@ -802,17 +857,24 @@ async function joinRoom() {
   playerId = nextPlayerId;
   roomCode = code;
   roomRef = joinRef;
+  setRoomActionState(false);
   enterRoom();
 }
 
 async function leaveRoom() {
+  if (roomActionInFlight) {
+    return;
+  }
+  setRoomActionState(true);
   if (!roomCode || !playerId || !roomRef) {
+    setRoomActionState(false);
     resetSession();
     return;
   }
 
   const snapshot = await get(roomRef);
   if (!snapshot.exists()) {
+    setRoomActionState(false);
     resetSession();
     return;
   }
@@ -820,6 +882,7 @@ async function leaveRoom() {
   const data = snapshot.val();
   const playerOrder = getOrderedPlayerIds(data);
   if (!playerOrder.includes(playerId)) {
+    setRoomActionState(false);
     resetSession();
     return;
   }
@@ -827,6 +890,7 @@ async function leaveRoom() {
   const remainingOrder = playerOrder.filter((id) => id !== playerId);
   if (remainingOrder.length === 0) {
     await remove(roomRef);
+    setRoomActionState(false);
     resetSession();
     return;
   }
@@ -860,6 +924,7 @@ async function leaveRoom() {
   }
 
   await update(roomRef, updates);
+  setRoomActionState(false);
   resetSession();
 }
 
@@ -895,14 +960,23 @@ async function submitClue() {
 }
 
 async function startGame() {
+  if (roomActionInFlight) {
+    return;
+  }
   if (!currentRoom || currentRoom.hostId !== playerId) {
     return;
   }
-  if (getOrderedPlayerIds(currentRoom).length < MIN_PLAYERS) {
+  const players = getOrderedPlayers(currentRoom);
+  if (players.length < MIN_PLAYERS) {
     showToast("Need at least 2 players.");
     return;
   }
+  if (!players.every((player) => player.ready)) {
+    showToast("Everyone must be ready.");
+    return;
+  }
 
+  setRoomActionState(true);
   await update(roomRef, {
     ...buildLobbyReset(currentRoom, {
       status: "playing",
@@ -910,17 +984,23 @@ async function startGame() {
       activeRoster: getOrderedPlayerIds(currentRoom)
     })
   });
+  setRoomActionState(false);
 }
 
 async function goToNextRound() {
+  if (roomActionInFlight) {
+    return;
+  }
   if (!currentRoom || currentRoom.hostId !== playerId) {
     return;
   }
 
+  setRoomActionState(true);
   if ((currentRoom.round || 1) >= TOTAL_ROUNDS) {
     await update(roomRef, {
       status: "gameover"
     });
+    setRoomActionState(false);
     return;
   }
 
@@ -932,9 +1012,13 @@ async function goToNextRound() {
     roundDeadline: createRoundDeadline(),
     activeRoster: getOrderedPlayerIds(currentRoom)
   });
+  setRoomActionState(false);
 }
 
 async function playAgain() {
+  if (roomActionInFlight) {
+    return;
+  }
   if (!currentRoom) {
     return;
   }
@@ -950,7 +1034,57 @@ async function playAgain() {
     return;
   }
 
-  await update(roomRef, buildLobbyReset(currentRoom));
+  setRoomActionState(true);
+  const readyPlayers = Object.fromEntries(playerIds.map((id) => [
+    id,
+    {
+      ...currentRoom.players[id],
+      ready: id === playerId
+    }
+  ]));
+  await update(roomRef, {
+    ...buildLobbyReset({
+      ...currentRoom,
+      players: readyPlayers
+    }),
+    players: readyPlayers
+  });
+  setRoomActionState(false);
+}
+
+async function toggleReady() {
+  if (roomActionInFlight || !currentRoom || currentRoom.status !== "lobby" || !playerId) {
+    return;
+  }
+  const nextReady = !Boolean(currentRoom.players?.[playerId]?.ready);
+  setRoomActionState(true);
+  await update(roomRef, {
+    [`players/${playerId}/ready`]: nextReady
+  });
+  setRoomActionState(false);
+}
+
+async function shareRoom() {
+  if (!roomCode) {
+    return;
+  }
+  const shareText = `Join my SameClue room: ${roomCode}`;
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: "SameClue",
+        text: shareText
+      });
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return;
+      }
+    }
+  }
+  navigator.clipboard.writeText(shareText).then(() => {
+    showToast("Invite copied.");
+  });
 }
 
 elements.btnCreate.addEventListener("click", () => {
@@ -986,6 +1120,14 @@ elements.btnCopyCode.addEventListener("click", () => {
   navigator.clipboard.writeText(roomCode).then(() => {
     showToast("Room code copied.");
   });
+});
+
+elements.btnShareCode.addEventListener("click", () => {
+  void shareRoom();
+});
+
+elements.btnReady.addEventListener("click", () => {
+  void toggleReady();
 });
 
 elements.btnStart.addEventListener("click", () => {

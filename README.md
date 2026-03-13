@@ -6,6 +6,7 @@ Real-time word matching game built with static frontend files and Firebase Realt
 
 - Supports 2 to 8 players in a room
 - Lets each player set and reuse a display name
+- Uses a lobby ready system so the host can only start when everyone is ready
 - 10 rounds per game
 - 30-second round timer to prevent stalled games
 - All players see the same secret word each round
@@ -14,6 +15,7 @@ Real-time word matching game built with static frontend files and Firebase Realt
 - A room-wide matching streak of 3 or more rounds gives matched players +1 bonus point
 - If the last player leaves, the room is deleted from the database
 - If someone leaves during an active match, the room is reset back to the lobby to avoid broken game state
+- Supports quick room sharing from the lobby with native share or clipboard fallback
 
 ## Files
 

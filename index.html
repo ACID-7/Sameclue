@@ -52,7 +52,10 @@
         <div class="lobby-header">
           <span class="label">Your Room</span>
           <div class="room-code-display" id="display-room-code">-----</div>
-          <button class="copy-btn" id="btn-copy-code" title="Copy code">Copy Code</button>
+          <div class="lobby-header-actions">
+            <button class="copy-btn" id="btn-copy-code" title="Copy code">Copy Code</button>
+            <button class="copy-btn" id="btn-share-code" title="Share room">Share</button>
+          </div>
         </div>
 
         <div class="lobby-meta">
@@ -68,6 +71,7 @@
 
         <div class="player-slots-grid" id="player-slots"></div>
         <div id="lobby-status" class="lobby-status">Share the room code to fill the lobby.</div>
+        <button class="btn btn-outline" id="btn-ready">Ready Up</button>
         <button class="btn btn-primary hidden" id="btn-start">Start Game</button>
         <button class="btn btn-ghost" id="btn-leave-lobby">Leave</button>
       </div>
