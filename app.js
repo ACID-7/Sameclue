@@ -92,6 +92,7 @@ let toastTimeoutId = null;
 let submitInFlight = false;
 let timerIntervalId = null;
 let disconnectHandlers = [];
+let disconnectRefreshSignature = "";
 
 function showScreen(id) {
   currentScreen = id;
@@ -213,6 +214,7 @@ function cancelDisconnectHandlers() {
     void handler.cancel();
   });
   disconnectHandlers = [];
+  disconnectRefreshSignature = "";
 }
 
 function sanitizeClue(clue) {
@@ -286,7 +288,7 @@ function renderLobby(data) {
     card.innerHTML = `
       <div class="slot-dot"></div>
       <strong>${player.name}</strong>
-      <span class="slot-role">${player.id === playerId ? "You" : "Joined"}${player.id === data.hostId ? " · Host" : ""}</span>
+      <span class="slot-role">${player.id === playerId ? "You" : "Joined"}${player.id === data.hostId ? " | Host" : ""}</span>
     `;
     elements.playerSlots.appendChild(card);
   }
@@ -376,6 +378,7 @@ function buildLobbyReset(data, overrides = {}) {
     resolvedRound: 0,
     lastResult: null,
     roundDeadline: null,
+    activeRoster: null,
     ...createResetRounds(),
     ...overrides
   };
@@ -566,8 +569,27 @@ function handleRoomUpdate(data) {
   submitInFlight = false;
 
   const livePlayers = getOrderedPlayerIds(data);
+  void registerDisconnectCleanup();
+
+  const activeRoster = Array.isArray(data.activeRoster) ? data.activeRoster : [];
+  const rosterChanged = activeRoster.length > 0 && activeRoster.some((id) => !livePlayers.includes(id));
   if (data.hostId && !livePlayers.includes(data.hostId) && livePlayers.length > 0 && playerId === livePlayers[0]) {
     void update(roomRef, { hostId: livePlayers[0] });
+    return;
+  }
+
+  if ((data.status === "playing" || data.status === "reveal") && (livePlayers.length < MIN_PLAYERS || rosterChanged)) {
+    if (livePlayers.length > 0 && playerId === livePlayers[0]) {
+      const remainingPlayers = Object.fromEntries(
+        livePlayers.map((id) => [id, data.players[id]])
+      );
+      void update(roomRef, buildLobbyReset({
+        ...data,
+        hostId: data.hostId && livePlayers.includes(data.hostId) ? data.hostId : livePlayers[0],
+        players: remainingPlayers,
+        playerOrder: livePlayers
+      }));
+    }
     return;
   }
 
@@ -607,7 +629,13 @@ function enterRoom() {
 }
 
 async function registerDisconnectCleanup() {
-  if (!roomCode || !playerId) {
+  if (!roomCode || !playerId || !currentRoom) {
+    return;
+  }
+
+  const playerCount = getOrderedPlayerIds(currentRoom).length;
+  const signature = `${roomCode}:${playerId}:${currentRoom.status}:${playerCount}:${currentRoom.hostId === playerId}`;
+  if (disconnectRefreshSignature === signature) {
     return;
   }
 
@@ -621,11 +649,16 @@ async function registerDisconnectCleanup() {
     handlers.push(onDisconnect(ref(db, `rooms/${roomCode}/${getRoundKey(round)}/${playerId}`)));
   }
 
+  if (playerCount === 1 && currentRoom.hostId === playerId) {
+    handlers.push(onDisconnect(roomRef));
+  }
+
   for (const handler of handlers) {
     await handler.remove();
   }
 
   disconnectHandlers = handlers;
+  disconnectRefreshSignature = signature;
 }
 
 async function createRoom() {
@@ -845,7 +878,8 @@ async function startGame() {
   await update(roomRef, {
     ...buildLobbyReset(currentRoom, {
       status: "playing",
-      roundDeadline: createRoundDeadline()
+      roundDeadline: createRoundDeadline(),
+      activeRoster: getOrderedPlayerIds(currentRoom)
     })
   });
 }
