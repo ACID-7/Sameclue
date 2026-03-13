@@ -5,11 +5,14 @@ Real-time word matching game built with static frontend files and Firebase Realt
 ## Current behavior
 
 - Supports 2 to 8 players in a room
+- Lets each player set and reuse a display name
 - 10 rounds per game
+- 30-second round timer to prevent stalled games
 - All players see the same secret word each round
 - Any clue used by 2 or more players scores for those players
 - Matching players get 2 points
 - A room-wide matching streak of 3 or more rounds gives matched players +1 bonus point
+- If the last player leaves, the room is deleted from the database
 - If someone leaves during an active match, the room is reset back to the lobby to avoid broken game state
 
 ## Files

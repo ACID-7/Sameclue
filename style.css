@@ -223,11 +223,19 @@ body {
   gap: 12px;
 }
 
+.name-field-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
 .join-form {
   display: flex;
   gap: 10px;
 }
 
+.name-input,
 .code-input,
 .clue-field {
   width: 100%;
@@ -247,6 +255,14 @@ body {
   text-transform: uppercase;
 }
 
+.name-input {
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-main);
+}
+
+.name-input:focus,
 .code-input:focus,
 .clue-field:focus {
   border-color: var(--accent-2);

@@ -2,6 +2,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import {
   getDatabase,
   get,
+  onDisconnect,
   onValue,
   remove,
   ref,
@@ -27,6 +28,8 @@ const db = getDatabase(firebaseApp);
 const MAX_PLAYERS = 8;
 const MIN_PLAYERS = 2;
 const TOTAL_ROUNDS = 10;
+const ROUND_DURATION_MS = 30000;
+const PLAYER_NAME_KEY = "sameclue-player-name";
 
 const elements = {
   btnCreate: document.getElementById("btn-create"),
@@ -41,6 +44,7 @@ const elements = {
   btnHome: document.getElementById("btn-home"),
   joinForm: document.getElementById("join-form"),
   joinCode: document.getElementById("join-code"),
+  playerName: document.getElementById("player-name"),
   toast: document.getElementById("toast"),
   lobbyStatus: document.getElementById("lobby-status"),
   lobbyPlayerCount: document.getElementById("lobby-player-count"),
@@ -51,6 +55,7 @@ const elements = {
   scoreMe: document.getElementById("score-me"),
   scoreLeader: document.getElementById("score-leader"),
   playerCount: document.getElementById("player-count"),
+  roundTimer: document.getElementById("round-timer"),
   streakBadge: document.getElementById("streak-badge"),
   streakNum: document.getElementById("streak-num"),
   secretWord: document.getElementById("secret-word"),
@@ -85,6 +90,8 @@ let currentScreen = "screen-home";
 let evaluationInFlight = false;
 let toastTimeoutId = null;
 let submitInFlight = false;
+let timerIntervalId = null;
+let disconnectHandlers = [];
 
 function showScreen(id) {
   currentScreen = id;
@@ -103,6 +110,22 @@ function showToast(message, duration = 2200) {
   toastTimeoutId = window.setTimeout(() => {
     elements.toast.classList.remove("show");
   }, duration);
+}
+
+function sanitizePlayerName(value) {
+  const cleaned = (value || "").replace(/\s+/g, " ").trim().slice(0, 18);
+  return cleaned || "Player";
+}
+
+function loadStoredPlayerName() {
+  return sanitizePlayerName(window.localStorage.getItem(PLAYER_NAME_KEY) || "Player");
+}
+
+function savePlayerName() {
+  const name = sanitizePlayerName(elements.playerName.value);
+  elements.playerName.value = name;
+  window.localStorage.setItem(PLAYER_NAME_KEY, name);
+  return name;
 }
 
 function generateRoomCode() {
@@ -152,6 +175,46 @@ function createResetRounds() {
   );
 }
 
+function createRoundDeadline() {
+  return Date.now() + ROUND_DURATION_MS;
+}
+
+function clearRoundTimer() {
+  if (timerIntervalId) {
+    window.clearInterval(timerIntervalId);
+    timerIntervalId = null;
+  }
+}
+
+function updateRoundTimer(deadline) {
+  if (!deadline) {
+    elements.roundTimer.textContent = "--";
+    return;
+  }
+
+  const remainingMs = Math.max(0, deadline - Date.now());
+  elements.roundTimer.textContent = String(Math.ceil(remainingMs / 1000));
+}
+
+function startRoundTimer(deadline) {
+  clearRoundTimer();
+  updateRoundTimer(deadline);
+  if (!deadline) {
+    return;
+  }
+
+  timerIntervalId = window.setInterval(() => {
+    updateRoundTimer(deadline);
+  }, 250);
+}
+
+function cancelDisconnectHandlers() {
+  disconnectHandlers.forEach((handler) => {
+    void handler.cancel();
+  });
+  disconnectHandlers = [];
+}
+
 function sanitizeClue(clue) {
   return clue.trim().toLowerCase().replace(/\s+/g, "");
 }
@@ -185,6 +248,8 @@ function detachRoomListener() {
 
 function resetSession() {
   detachRoomListener();
+  cancelDisconnectHandlers();
+  clearRoundTimer();
   roomCode = null;
   playerId = null;
   roomRef = null;
@@ -257,12 +322,14 @@ function renderGame(data) {
   const submittedCount = countSubmittedPlayers(data);
   const players = getOrderedPlayers(data);
   const secretWord = data.words?.[(data.round || 1) - 1] || "---";
+  const deadline = data.roundDeadline || 0;
 
   elements.roundNum.textContent = String(data.round || 1);
   elements.scoreMe.textContent = String(data.scores?.[playerId] || 0);
   elements.scoreLeader.textContent = String(getLeaderScore(data));
   elements.playerCount.textContent = String(players.length);
   elements.secretWord.textContent = secretWord;
+  startRoundTimer(deadline);
 
   if ((data.streak || 0) >= 2) {
     elements.streakBadge.classList.remove("hidden");
@@ -276,9 +343,16 @@ function renderGame(data) {
     elements.waitingPanel.classList.remove("hidden");
     elements.myLockedWord.textContent = roundData[playerId];
   } else {
-    elements.clueEntry.classList.remove("hidden");
-    elements.waitingPanel.classList.add("hidden");
-    elements.clueInput.focus();
+    const timedOut = Boolean(deadline) && Date.now() >= deadline;
+    if (timedOut) {
+      elements.clueEntry.classList.add("hidden");
+      elements.waitingPanel.classList.remove("hidden");
+      elements.myLockedWord.textContent = "No clue";
+    } else {
+      elements.clueEntry.classList.remove("hidden");
+      elements.waitingPanel.classList.add("hidden");
+      elements.clueInput.focus();
+    }
   }
 
   const remaining = players.length - submittedCount;
@@ -301,6 +375,7 @@ function buildLobbyReset(data, overrides = {}) {
     totalMatches: 0,
     resolvedRound: 0,
     lastResult: null,
+    roundDeadline: null,
     ...createResetRounds(),
     ...overrides
   };
@@ -315,6 +390,8 @@ function renderReveal(data) {
   const players = getOrderedPlayers(data);
   const scoringPlayers = new Set(result.scoringPlayers || []);
   const roundData = getRoundData(data);
+  clearRoundTimer();
+  updateRoundTimer(null);
 
   elements.revealSecretWord.textContent = data.words?.[(data.round || 1) - 1] || "---";
   elements.revealScoreMe.textContent = String(data.scores?.[playerId] || 0);
@@ -347,7 +424,7 @@ function renderReveal(data) {
         <strong>${player.name}</strong>
         <span>${player.id === playerId ? "You" : `Score ${data.scores?.[player.id] || 0}`}</span>
       </div>
-      <div class="reveal-clue">${roundData[player.id] || "-"}</div>
+      <div class="reveal-clue">${roundData[player.id] || "No clue"}</div>
     `;
     elements.revealCluesList.appendChild(card);
   }
@@ -370,6 +447,8 @@ function renderFinal(data) {
 
   const rank = standings.findIndex((player) => player.id === playerId) + 1;
   const myScore = data.scores?.[playerId] || 0;
+  clearRoundTimer();
+  updateRoundTimer(null);
 
   elements.finalRank.textContent = `#${rank || standings.length}`;
   elements.finalScoreMe.textContent = String(myScore);
@@ -476,12 +555,21 @@ function shouldEvaluateRound(data) {
   if ((data.resolvedRound || 0) >= (data.round || 1)) {
     return false;
   }
-  return countSubmittedPlayers(data) === getOrderedPlayerIds(data).length;
+  if (countSubmittedPlayers(data) === getOrderedPlayerIds(data).length) {
+    return true;
+  }
+  return Boolean(data.roundDeadline && Date.now() >= data.roundDeadline);
 }
 
 function handleRoomUpdate(data) {
   currentRoom = data;
   submitInFlight = false;
+
+  const livePlayers = getOrderedPlayerIds(data);
+  if (data.hostId && !livePlayers.includes(data.hostId) && livePlayers.length > 0 && playerId === livePlayers[0]) {
+    void update(roomRef, { hostId: livePlayers[0] });
+    return;
+  }
 
   if (shouldEvaluateRound(data)) {
     void evaluateRound(data);
@@ -507,6 +595,7 @@ function handleRoomUpdate(data) {
 function enterRoom() {
   elements.displayRoomCode.textContent = roomCode;
   detachRoomListener();
+  void registerDisconnectCleanup();
   roomUnsubscribe = onValue(roomRef, (snapshot) => {
     if (!snapshot.exists()) {
       showToast("Room was closed.");
@@ -517,11 +606,34 @@ function enterRoom() {
   });
 }
 
+async function registerDisconnectCleanup() {
+  if (!roomCode || !playerId) {
+    return;
+  }
+
+  cancelDisconnectHandlers();
+  const handlers = [
+    onDisconnect(ref(db, `rooms/${roomCode}/players/${playerId}`)),
+    onDisconnect(ref(db, `rooms/${roomCode}/scores/${playerId}`))
+  ];
+
+  for (let round = 1; round <= TOTAL_ROUNDS; round += 1) {
+    handlers.push(onDisconnect(ref(db, `rooms/${roomCode}/${getRoundKey(round)}/${playerId}`)));
+  }
+
+  for (const handler of handlers) {
+    await handler.remove();
+  }
+
+  disconnectHandlers = handlers;
+}
+
 async function createRoom() {
+  const playerName = savePlayerName();
   playerId = generatePlayerId();
   const players = {
     [playerId]: {
-      name: "Player 1",
+      name: playerName,
       joinedAt: Date.now()
     }
   };
@@ -545,6 +657,7 @@ async function createRoom() {
         bestStreak: 0,
         totalMatches: 0,
         resolvedRound: 0,
+        roundDeadline: null,
         created: Date.now(),
         ...createResetRounds()
       };
@@ -562,6 +675,7 @@ async function createRoom() {
 }
 
 async function joinRoom() {
+  const playerName = savePlayerName();
   const code = elements.joinCode.value.trim().toUpperCase();
   if (code.length < 4) {
     showToast("Enter a valid room code.");
@@ -606,7 +720,7 @@ async function joinRoom() {
       players: {
         ...(room.players || {}),
         [nextPlayerId]: {
-          name: `Player ${nextOrder.length}`,
+          name: playerName,
           joinedAt: Date.now()
         }
       },
@@ -692,6 +806,10 @@ async function submitClue() {
   if (!currentRoom || currentRoom.status !== "playing" || submitInFlight) {
     return;
   }
+  if (currentRoom.roundDeadline && Date.now() >= currentRoom.roundDeadline) {
+    showToast("Time is up for this round.");
+    return;
+  }
 
   const secretWord = currentRoom.words?.[(currentRoom.round || 1) - 1] || "";
   const validation = validateClue(elements.clueInput.value, secretWord);
@@ -726,7 +844,8 @@ async function startGame() {
 
   await update(roomRef, {
     ...buildLobbyReset(currentRoom, {
-      status: "playing"
+      status: "playing",
+      roundDeadline: createRoundDeadline()
     })
   });
 }
@@ -747,7 +866,8 @@ async function goToNextRound() {
     status: "playing",
     round: (currentRoom.round || 1) + 1,
     resolvedRound: currentRoom.round,
-    lastResult: null
+    lastResult: null,
+    roundDeadline: createRoundDeadline()
   });
 }
 
@@ -772,6 +892,11 @@ async function playAgain() {
 
 elements.btnCreate.addEventListener("click", () => {
   void createRoom();
+});
+
+elements.playerName.value = loadStoredPlayerName();
+elements.playerName.addEventListener("change", () => {
+  savePlayerName();
 });
 
 elements.btnJoinToggle.addEventListener("click", () => {
@@ -828,4 +953,10 @@ elements.btnPlayAgain.addEventListener("click", () => {
 
 elements.btnHome.addEventListener("click", () => {
   void leaveRoom();
+});
+
+window.addEventListener("pagehide", () => {
+  if (roomCode && playerId) {
+    void leaveRoom();
+  }
 });
