@@ -30,6 +30,8 @@ const MIN_PLAYERS = 2;
 const TOTAL_ROUNDS = 10;
 const ROUND_DURATION_MS = 30000;
 const PLAYER_NAME_KEY = "sameclue-player-name";
+const LAST_SWEEP_KEY = "sameclue-last-room-sweep";
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 const elements = {
   btnCreate: document.getElementById("btn-create"),
@@ -132,6 +134,43 @@ function savePlayerName() {
   elements.playerName.value = name;
   window.localStorage.setItem(PLAYER_NAME_KEY, name);
   return name;
+}
+
+function getPlayerCount(data) {
+  return getOrderedPlayerIds(data).length;
+}
+
+async function cleanupOrphanRooms() {
+  const now = Date.now();
+  const lastSweep = Number(window.localStorage.getItem(LAST_SWEEP_KEY) || 0);
+  if (now - lastSweep < SWEEP_INTERVAL_MS) {
+    return;
+  }
+  window.localStorage.setItem(LAST_SWEEP_KEY, String(now));
+
+  try {
+    const roomsSnap = await get(ref(db, "rooms"));
+    if (!roomsSnap.exists()) {
+      return;
+    }
+
+    const updates = {};
+    roomsSnap.forEach((roomChild) => {
+      const room = roomChild.val() || {};
+      const roomPlayers = Array.isArray(room.playerOrder)
+        ? room.playerOrder.filter((id) => room.players?.[id])
+        : [];
+      if (roomPlayers.length === 0) {
+        updates[roomChild.key] = null;
+      }
+    });
+
+    if (Object.keys(updates).length > 0) {
+      void update(ref(db, "rooms"), updates);
+    }
+  } catch {
+    // Best-effort cleanup only; ignore sweep errors.
+  }
 }
 
 function setRoomActionState(isBusy) {
@@ -721,7 +760,7 @@ async function registerDisconnectCleanup() {
     return;
   }
 
-  const playerCount = getOrderedPlayerIds(currentRoom).length;
+  const playerCount = getPlayerCount(currentRoom);
   const signature = `${roomCode}:${playerId}:${currentRoom.status}:${playerCount}:${currentRoom.hostId === playerId}`;
   if (disconnectRefreshSignature === signature) {
     return;
@@ -972,7 +1011,7 @@ async function submitClue() {
   elements.clueInput.value = "";
 
   try {
-    await runTransaction(roomRef, (room) => {
+    const result = await runTransaction(roomRef, (room) => {
       if (!room || room.status !== "playing") {
         return room;
       }
@@ -993,9 +1032,17 @@ async function submitClue() {
         }
       };
     });
+
+    // If this client missed the deadline race, show explicit feedback.
+    const after = result.snapshot.val();
+    if (after?.status === "playing" && (after.roundDeadline || 0) <= Date.now() && !after[getRoundKey(after.round || 1)]?.[playerId]) {
+      showToast("Time is up for this round.");
+    }
   } catch (error) {
-    submitInFlight = false;
     showToast("Could not submit clue. Try again.");
+  } finally {
+    // Avoid permanent lock if no immediate room update arrives.
+    submitInFlight = false;
   }
 }
 
@@ -1163,9 +1210,13 @@ async function shareRoom() {
       }
     }
   }
-  navigator.clipboard.writeText(shareText).then(() => {
-    showToast("Invite copied.");
-  });
+  navigator.clipboard.writeText(shareText)
+    .then(() => {
+      showToast("Invite copied.");
+    })
+    .catch(() => {
+      showToast("Share unavailable on this browser.");
+    });
 }
 
 elements.btnCreate.addEventListener("click", () => {
@@ -1246,3 +1297,5 @@ window.addEventListener("pagehide", () => {
     void leaveRoom();
   }
 });
+
+void cleanupOrphanRooms();
