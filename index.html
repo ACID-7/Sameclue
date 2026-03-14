@@ -25,17 +25,43 @@
 
       <div class="home-content">
         <div class="logo-area">
-          <div class="logo-badge">O</div>
+          <div class="logo-badge">SC</div>
           <h1 class="logo-title">SameClue</h1>
-          <p class="logo-sub">Think the same. Score together.</p>
+          <p class="logo-sub">Think alike. Match clues. Win together.</p>
         </div>
 
-        <div class="home-actions">
+        <div class="home-panel">
+          <div class="home-panel-head">
+            <span class="label">Room Setup</span>
+            <button class="copy-btn" id="btn-random-name" title="Randomize name">Random Name</button>
+          </div>
           <div class="name-field-wrap">
             <label class="label" for="player-name">Your Name</label>
             <input type="text" id="player-name" class="name-input" placeholder="Enter your name" maxlength="18" />
           </div>
+          <div class="setup-grid">
+            <label class="setup-item">
+              <span class="label">Rounds</span>
+              <select id="settings-rounds" class="setup-select">
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="15">15</option>
+              </select>
+            </label>
+            <label class="setup-item">
+              <span class="label">Timer</span>
+              <select id="settings-timer" class="setup-select">
+                <option value="20000">20s</option>
+                <option value="30000" selected>30s</option>
+                <option value="45000">45s</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="home-actions">
           <button class="btn btn-primary" id="btn-create">Create Room</button>
+          <button class="btn btn-outline" id="btn-quick-join">Quick Join Last Room</button>
           <button class="btn btn-outline" id="btn-join-toggle">Join Room</button>
           <div id="join-form" class="join-form hidden">
             <input type="text" id="join-code" class="code-input" placeholder="ROOM CODE" maxlength="6" />
@@ -43,7 +69,11 @@
           </div>
         </div>
 
-        <p class="home-hint">2 to 8 players, 10 rounds, shared room code</p>
+        <div class="home-help">
+          <span class="label">How It Works</span>
+          <p>Everyone sees the same secret word. Submit one clue before the timer ends. Matching clues score points together.</p>
+        </div>
+        <p class="home-hint">2 to 8 players, live rooms, no account needed</p>
       </div>
     </div>
 
@@ -82,7 +112,7 @@
         <div class="round-info">
           <span class="label">Round</span>
           <span id="round-num" class="round-num">1</span>
-          <span class="round-of">/ 10</span>
+          <span class="round-of">/ <span id="round-total">10</span></span>
         </div>
 
         <div class="score-display">

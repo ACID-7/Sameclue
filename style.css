@@ -190,7 +190,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 36px;
+  gap: 24px;
 }
 
 .logo-area {
@@ -224,6 +224,63 @@ body {
   color: var(--text-muted);
 }
 
+.home-panel,
+.home-help {
+  width: 100%;
+  background: rgba(19, 19, 26, 0.92);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.home-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.home-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.setup-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-select {
+  width: 100%;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  outline: none;
+  padding: 10px 12px;
+  font-family: var(--font-main);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.setup-select:focus {
+  border-color: var(--accent-2);
+}
+
+.home-help {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .home-actions,
 .final-actions {
   width: 100%;
@@ -246,7 +303,8 @@ body {
 
 .name-input,
 .code-input,
-.clue-field {
+.clue-field,
+.setup-select {
   width: 100%;
   background: var(--surface);
   border: 2px solid var(--border);
@@ -273,7 +331,8 @@ body {
 
 .name-input:focus,
 .code-input:focus,
-.clue-field:focus {
+.clue-field:focus,
+.setup-select:focus {
   border-color: var(--accent-2);
 }
 
@@ -752,6 +811,11 @@ body {
     gap: 20px;
   }
 
+  .home-panel,
+  .home-help {
+    padding: 12px;
+  }
+
   .player-slots-grid,
   .reveal-clues-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -776,7 +840,8 @@ body {
   .reveal-scores,
   .final-summary,
   .final-stats,
-  .lobby-meta {
+  .lobby-meta,
+  .setup-grid {
     display: grid;
     grid-template-columns: 1fr;
   }

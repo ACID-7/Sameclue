@@ -27,9 +27,17 @@ const db = getDatabase(firebaseApp);
 
 const MAX_PLAYERS = 8;
 const MIN_PLAYERS = 2;
-const TOTAL_ROUNDS = 10;
-const ROUND_DURATION_MS = 30000;
+const DEFAULT_TOTAL_ROUNDS = 10;
+const DEFAULT_ROUND_DURATION_MS = 30000;
+const MIN_TOTAL_ROUNDS = 5;
+const MAX_TOTAL_ROUNDS = 15;
+const MIN_ROUND_DURATION_MS = 15000;
+const MAX_ROUND_DURATION_MS = 60000;
+const ROUND_KEYS_LIMIT = 25;
 const PLAYER_NAME_KEY = "sameclue-player-name";
+const LAST_ROOM_CODE_KEY = "sameclue-last-room-code";
+const SETTINGS_ROUNDS_KEY = "sameclue-setting-rounds";
+const SETTINGS_TIMER_KEY = "sameclue-setting-timer";
 const LAST_SWEEP_KEY = "sameclue-last-room-sweep";
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -37,8 +45,10 @@ const elements = {
   btnCreate: document.getElementById("btn-create"),
   btnJoinToggle: document.getElementById("btn-join-toggle"),
   btnJoin: document.getElementById("btn-join"),
+  btnQuickJoin: document.getElementById("btn-quick-join"),
   btnCopyCode: document.getElementById("btn-copy-code"),
   btnShareCode: document.getElementById("btn-share-code"),
+  btnRandomName: document.getElementById("btn-random-name"),
   btnReady: document.getElementById("btn-ready"),
   btnStart: document.getElementById("btn-start"),
   btnLeaveLobby: document.getElementById("btn-leave-lobby"),
@@ -49,6 +59,8 @@ const elements = {
   joinForm: document.getElementById("join-form"),
   joinCode: document.getElementById("join-code"),
   playerName: document.getElementById("player-name"),
+  settingsRounds: document.getElementById("settings-rounds"),
+  settingsTimer: document.getElementById("settings-timer"),
   toast: document.getElementById("toast"),
   lobbyStatus: document.getElementById("lobby-status"),
   lobbyPlayerCount: document.getElementById("lobby-player-count"),
@@ -56,6 +68,7 @@ const elements = {
   displayRoomCode: document.getElementById("display-room-code"),
   playerSlots: document.getElementById("player-slots"),
   roundNum: document.getElementById("round-num"),
+  roundTotal: document.getElementById("round-total"),
   scoreMe: document.getElementById("score-me"),
   scoreLeader: document.getElementById("score-leader"),
   playerCount: document.getElementById("player-count"),
@@ -136,6 +149,89 @@ function savePlayerName() {
   return name;
 }
 
+function randomPlayerName() {
+  const adjectives = ["Swift", "Bright", "Silent", "Neon", "Clever", "Solar", "Wild", "Lucky", "Calm", "Rapid"];
+  const nouns = ["Fox", "Wave", "Spark", "Echo", "Tiger", "Nova", "Comet", "Falcon", "Otter", "Raven"];
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  const number = Math.floor(Math.random() * 90) + 10;
+  return `${adjective}${noun}${number}`;
+}
+
+function clampNumber(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
+}
+
+function sanitizeTotalRounds(value) {
+  return clampNumber(value, MIN_TOTAL_ROUNDS, MAX_TOTAL_ROUNDS, DEFAULT_TOTAL_ROUNDS);
+}
+
+function sanitizeRoundDuration(value) {
+  return clampNumber(value, MIN_ROUND_DURATION_MS, MAX_ROUND_DURATION_MS, DEFAULT_ROUND_DURATION_MS);
+}
+
+function getRoomTotalRounds(data) {
+  return sanitizeTotalRounds(data?.settings?.totalRounds ?? data?.totalRounds ?? DEFAULT_TOTAL_ROUNDS);
+}
+
+function getRoomRoundDuration(data) {
+  return sanitizeRoundDuration(data?.settings?.roundDurationMs ?? DEFAULT_ROUND_DURATION_MS);
+}
+
+function getSelectedSettings() {
+  const totalRounds = sanitizeTotalRounds(elements.settingsRounds.value);
+  const roundDurationMs = sanitizeRoundDuration(elements.settingsTimer.value);
+  return { totalRounds, roundDurationMs };
+}
+
+function setSettingsUI({ totalRounds, roundDurationMs }) {
+  elements.settingsRounds.value = String(sanitizeTotalRounds(totalRounds));
+  elements.settingsTimer.value = String(sanitizeRoundDuration(roundDurationMs));
+}
+
+function saveSettings() {
+  const settings = getSelectedSettings();
+  window.localStorage.setItem(SETTINGS_ROUNDS_KEY, String(settings.totalRounds));
+  window.localStorage.setItem(SETTINGS_TIMER_KEY, String(settings.roundDurationMs));
+  return settings;
+}
+
+function loadSettings() {
+  const totalRounds = sanitizeTotalRounds(window.localStorage.getItem(SETTINGS_ROUNDS_KEY) || DEFAULT_TOTAL_ROUNDS);
+  const roundDurationMs = sanitizeRoundDuration(window.localStorage.getItem(SETTINGS_TIMER_KEY) || DEFAULT_ROUND_DURATION_MS);
+  const settings = { totalRounds, roundDurationMs };
+  setSettingsUI(settings);
+  return settings;
+}
+
+function saveLastRoomCode(code) {
+  if (code) {
+    window.localStorage.setItem(LAST_ROOM_CODE_KEY, code);
+    refreshQuickJoinButton();
+  }
+}
+
+function getLastRoomCode() {
+  return (window.localStorage.getItem(LAST_ROOM_CODE_KEY) || "").trim().toUpperCase();
+}
+
+function getRoomSettingsSummary(data) {
+  const totalRounds = getRoomTotalRounds(data);
+  const roundDurationSeconds = Math.round(getRoomRoundDuration(data) / 1000);
+  return `${totalRounds} rounds · ${roundDurationSeconds}s timer`;
+}
+
+function refreshQuickJoinButton() {
+  const lastCode = getLastRoomCode();
+  const hasCode = lastCode.length >= 4;
+  elements.btnQuickJoin.disabled = !hasCode;
+  elements.btnQuickJoin.textContent = hasCode ? `Quick Join ${lastCode}` : "Quick Join Last Room";
+}
+
 function getPlayerCount(data) {
   return getOrderedPlayerIds(data).length;
 }
@@ -177,16 +273,26 @@ function setRoomActionState(isBusy) {
   roomActionInFlight = isBusy;
   [
     elements.btnCreate,
+    elements.btnJoinToggle,
     elements.btnJoin,
+    elements.btnQuickJoin,
+    elements.btnRandomName,
     elements.btnStart,
     elements.btnNextRound,
     elements.btnPlayAgain,
     elements.btnLeaveLobby,
     elements.btnHome,
-    elements.btnReady
+    elements.btnReady,
+    elements.settingsRounds,
+    elements.settingsTimer
   ].forEach((button) => {
     if (button) {
-      button.disabled = isBusy;
+      if (button === elements.btnQuickJoin && !isBusy) {
+        const hasLastCode = getLastRoomCode().length >= 4;
+        button.disabled = !hasLastCode;
+      } else {
+        button.disabled = isBusy;
+      }
     }
   });
 }
@@ -282,12 +388,12 @@ function buildRoundResult(data) {
 
 function createResetRounds() {
   return Object.fromEntries(
-    Array.from({ length: TOTAL_ROUNDS }, (_, index) => [getRoundKey(index + 1), null])
+    Array.from({ length: ROUND_KEYS_LIMIT }, (_, index) => [getRoundKey(index + 1), null])
   );
 }
 
-function createRoundDeadline() {
-  return Date.now() + ROUND_DURATION_MS;
+function createRoundDeadline(data) {
+  return Date.now() + getRoomRoundDuration(data);
 }
 
 function clearRoundTimer() {
@@ -393,6 +499,7 @@ function resetSession() {
   evaluationInFlight = false;
   submitInFlight = false;
   elements.clueInput.value = "";
+  refreshQuickJoinButton();
   showScreen("screen-home");
 }
 
@@ -444,13 +551,15 @@ function renderLobby(data) {
   }
 
   if (players.length < MIN_PLAYERS) {
-    elements.lobbyStatus.textContent = "Need at least 2 players to start.";
+    elements.lobbyStatus.textContent = `Need at least 2 players to start. ${getRoomSettingsSummary(data)}`;
   } else if (!allReady) {
-    elements.lobbyStatus.textContent = isHost ? "Waiting for everyone to ready up." : "Mark yourself ready to start.";
+    elements.lobbyStatus.textContent = isHost
+      ? `Waiting for everyone to ready up. ${getRoomSettingsSummary(data)}`
+      : `Mark yourself ready to start. ${getRoomSettingsSummary(data)}`;
   } else if (isHost) {
-    elements.lobbyStatus.textContent = "Everyone is ready. Start the game.";
+    elements.lobbyStatus.textContent = `Everyone is ready. Start the game. ${getRoomSettingsSummary(data)}`;
   } else {
-    elements.lobbyStatus.textContent = "All players ready. Waiting for the host.";
+    elements.lobbyStatus.textContent = `All players ready. Waiting for the host. ${getRoomSettingsSummary(data)}`;
   }
 
   elements.btnReady.textContent = meReady ? "Unready" : "Ready Up";
@@ -471,6 +580,7 @@ function renderGame(data) {
   const deadline = data.roundDeadline || 0;
 
   elements.roundNum.textContent = String(data.round || 1);
+  elements.roundTotal.textContent = String(getRoomTotalRounds(data));
   elements.scoreMe.textContent = String(data.scores?.[playerId] || 0);
   elements.scoreLeader.textContent = String(getLeaderScore(data));
   elements.playerCount.textContent = String(players.length);
@@ -515,11 +625,17 @@ function renderGame(data) {
 function buildLobbyReset(data, overrides = {}) {
   const playerIds = getOrderedPlayerIds(data);
   const scores = Object.fromEntries(playerIds.map((id) => [id, 0]));
+  const totalRounds = getRoomTotalRounds(data);
+  const roundDurationMs = getRoomRoundDuration(data);
 
   return {
     status: "lobby",
     round: 1,
-    words: getWordList(TOTAL_ROUNDS),
+    words: getWordList(totalRounds),
+    settings: {
+      totalRounds,
+      roundDurationMs
+    },
     scores,
     streak: 0,
     bestStreak: 0,
@@ -582,7 +698,7 @@ function renderReveal(data) {
   }
 
   elements.btnNextRound.classList.toggle("hidden", data.hostId !== playerId);
-  elements.btnNextRound.textContent = data.round >= TOTAL_ROUNDS ? "See Results" : "Next Round";
+  elements.btnNextRound.textContent = data.round >= getRoomTotalRounds(data) ? "See Results" : "Next Round";
 }
 
 function renderFinal(data) {
@@ -606,7 +722,7 @@ function renderFinal(data) {
   elements.finalScoreMe.textContent = String(myScore);
   elements.statMatches.textContent = String(data.totalMatches || 0);
   elements.statStreak.textContent = String(data.bestStreak || 0);
-  elements.statRounds.textContent = String(TOTAL_ROUNDS);
+  elements.statRounds.textContent = String(getRoomTotalRounds(data));
 
   if (rank === 1) {
     elements.finalTrophy.textContent = "1";
@@ -772,7 +888,7 @@ async function registerDisconnectCleanup() {
     onDisconnect(ref(db, `rooms/${roomCode}/scores/${playerId}`))
   ];
 
-  for (let round = 1; round <= TOTAL_ROUNDS; round += 1) {
+  for (let round = 1; round <= ROUND_KEYS_LIMIT; round += 1) {
     handlers.push(onDisconnect(ref(db, `rooms/${roomCode}/${getRoundKey(round)}/${playerId}`)));
   }
 
@@ -794,6 +910,7 @@ async function createRoom() {
   }
   setRoomActionState(true);
   const playerName = savePlayerName();
+  const settings = saveSettings();
   playerId = generatePlayerId();
   const players = {
     [playerId]: {
@@ -817,7 +934,8 @@ async function createRoom() {
         playerOrder: [playerId],
         scores: { [playerId]: 0 },
         round: 1,
-        words: getWordList(TOTAL_ROUNDS),
+        words: getWordList(settings.totalRounds),
+        settings,
         streak: 0,
         bestStreak: 0,
         totalMatches: 0,
@@ -831,6 +949,7 @@ async function createRoom() {
     if (result.committed) {
       roomCode = candidateCode;
       roomRef = candidateRef;
+      saveLastRoomCode(roomCode);
       setRoomActionState(false);
       enterRoom();
       return;
@@ -841,13 +960,13 @@ async function createRoom() {
   showToast("Could not create a room. Try again.");
 }
 
-async function joinRoom() {
+async function joinRoomByCode(rawCode) {
   if (roomActionInFlight) {
     return;
   }
   setRoomActionState(true);
   const playerName = savePlayerName();
-  const code = elements.joinCode.value.trim().toUpperCase();
+  const code = (rawCode || "").trim().toUpperCase();
   if (code.length < 4) {
     setRoomActionState(false);
     showToast("Enter a valid room code.");
@@ -918,8 +1037,26 @@ async function joinRoom() {
   playerId = nextPlayerId;
   roomCode = code;
   roomRef = joinRef;
+  saveLastRoomCode(roomCode);
   setRoomActionState(false);
   enterRoom();
+}
+
+async function joinRoom() {
+  await joinRoomByCode(elements.joinCode.value);
+}
+
+async function quickJoinLastRoom() {
+  const code = getLastRoomCode();
+  if (!code) {
+    showToast("No recent room saved yet.");
+    return;
+  }
+  elements.joinCode.value = code;
+  if (elements.joinForm.classList.contains("hidden")) {
+    elements.joinForm.classList.remove("hidden");
+  }
+  await joinRoomByCode(code);
 }
 
 async function leaveRoom() {
@@ -966,7 +1103,7 @@ async function leaveRoom() {
     updates.hostId = remainingOrder[0];
   }
 
-  for (let round = 1; round <= TOTAL_ROUNDS; round += 1) {
+  for (let round = 1; round <= ROUND_KEYS_LIMIT; round += 1) {
     updates[`${getRoundKey(round)}/${playerId}`] = null;
   }
 
@@ -1077,7 +1214,7 @@ async function startGame() {
       ...room,
       ...buildLobbyReset(room, {
         status: "playing",
-        roundDeadline: createRoundDeadline(),
+        roundDeadline: createRoundDeadline(room),
         activeRoster: getOrderedPlayerIds(room)
       })
     };
@@ -1101,7 +1238,7 @@ async function goToNextRound() {
     if (room.status !== "reveal") {
       return room;
     }
-    if ((room.round || 1) >= TOTAL_ROUNDS) {
+    if ((room.round || 1) >= getRoomTotalRounds(room)) {
       return {
         ...room,
         status: "gameover"
@@ -1114,7 +1251,7 @@ async function goToNextRound() {
       round: (room.round || 1) + 1,
       resolvedRound: room.round,
       lastResult: null,
-      roundDeadline: createRoundDeadline(),
+      roundDeadline: createRoundDeadline(room),
       activeRoster: getOrderedPlayerIds(room)
     };
   });
@@ -1224,7 +1361,24 @@ elements.btnCreate.addEventListener("click", () => {
 });
 
 elements.playerName.value = loadStoredPlayerName();
+loadSettings();
+refreshQuickJoinButton();
 elements.playerName.addEventListener("change", () => {
+  savePlayerName();
+});
+elements.playerName.addEventListener("blur", () => {
+  savePlayerName();
+});
+
+elements.settingsRounds.addEventListener("change", () => {
+  saveSettings();
+});
+elements.settingsTimer.addEventListener("change", () => {
+  saveSettings();
+});
+
+elements.btnRandomName.addEventListener("click", () => {
+  elements.playerName.value = randomPlayerName();
   savePlayerName();
 });
 
@@ -1237,6 +1391,10 @@ elements.btnJoinToggle.addEventListener("click", () => {
 
 elements.btnJoin.addEventListener("click", () => {
   void joinRoom();
+});
+
+elements.btnQuickJoin.addEventListener("click", () => {
+  void quickJoinLastRoom();
 });
 
 elements.joinCode.addEventListener("keydown", (event) => {
