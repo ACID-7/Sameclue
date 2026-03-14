@@ -103,6 +103,7 @@ function showScreen(id) {
   document.querySelectorAll(".screen").forEach((screen) => {
     screen.classList.toggle("active", screen.id === id);
   });
+  window.scrollTo(0, 0);
 }
 
 function showToast(message, duration = 2200) {
@@ -1050,7 +1051,7 @@ async function goToNextRound() {
     if (!room || room.hostId !== playerId) {
       return room;
     }
-    if (room.status !== "reveal" && room.status !== "playing") {
+    if (room.status !== "reveal") {
       return room;
     }
     if ((room.round || 1) >= TOTAL_ROUNDS) {
