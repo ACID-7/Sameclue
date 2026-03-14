@@ -1,5 +1,22 @@
 import { EXTRA_WORDS } from "./extraWords.js";
 
+// Category labels for UI
+export const CATEGORY_OPTIONS = [
+  { value: "all", label: "All words" },
+  { value: "mixed", label: "Mixed (curated)" },
+  { value: "animals", label: "Animals" },
+  { value: "food", label: "Food & drink" },
+  { value: "nature", label: "Nature & weather" },
+  { value: "things", label: "Objects & things" },
+  { value: "places", label: "Places" },
+  { value: "actions", label: "Actions & verbs" },
+  { value: "feelings", label: "Feelings & ideas" },
+  { value: "science", label: "Science & tech" },
+  { value: "sports", label: "Sports & games" },
+  { value: "music", label: "Music & arts" },
+  { value: "travel", label: "Travel & adventure" }
+];
+
 export const WORDS = {
   easy: [
     "CAT","DOG","FISH","BIRD","BEAR","LION","FROG","DUCK","COW","PIG","BEE","ANT",
@@ -52,11 +69,46 @@ export const WORDS = {
 
 export const ALL_WORDS = [...new Set([...WORDS.easy, ...WORDS.medium, ...WORDS.hard, ...EXTRA_WORDS])];
 
-export function getWordList(count = 10) {
-  const pool = [...ALL_WORDS];
+// Words by category (curated from WORDS + EXTRA_WORDS)
+const ANIMALS = ["CAT", "DOG", "FISH", "BIRD", "BEAR", "LION", "FROG", "DUCK", "COW", "PIG", "BEE", "ANT", "WOLF", "DEER", "CRAB", "SHARK", "EAGLE", "WHALE", "HORSE", "SNAKE", "TURTLE", "RABBIT", "ELEPHANT", "GIRAFFE", "PENGUIN", "DOLPHIN", "BUTTERFLY", "CHICKEN", "MONKEY", "TIGER", "OCTOPUS", "FLAMINGO", "CROCODILE", "PARROT", "HAMSTER", "CHEETAH", "GORILLA", "PANDA", "HEDGEHOG", "PLATYPUS", "JAGUAR", "PEACOCK", "OSTRICH", "LOBSTER", "SEAHORSE", "ANIMAL"];
+const FOOD = ["PIZZA", "CAKE", "BREAD", "APPLE", "MILK", "EGG", "RICE", "SOUP", "SALT", "SUGAR", "CHEESE", "PASTA", "BUTTER", "HONEY", "LEMON", "ORANGE", "GRAPE", "BERRY", "MANGO", "COOKIE", "SANDWICH", "CHOCOLATE", "COFFEE", "TEA", "JUICE", "WATER", "BANANA", "TOMATO", "SUSHI", "TACOS", "BAGEL", "WAFFLE", "BURRITO", "DUMPLING", "PRETZEL", "MUFFIN", "AVOCADO", "BROCCOLI", "MUSHROOM", "PINEAPPLE", "COCONUT", "POPCORN", "CARAMEL", "ESPRESSO", "SMOOTHIE", "LASAGNA", "OMELETTE", "KEBAB", "PANCAKE", "CROISSANT", "FOOD"];
+const NATURE = ["FIRE", "RAIN", "SNOW", "WIND", "STORM", "STAR", "MOON", "SUN", "CLOUD", "NIGHT", "BEACH", "LAKE", "RIVER", "FOREST", "MOUNTAIN", "DESERT", "JUNGLE", "VOLCANO", "GLACIER", "CANYON", "WATERFALL", "MEADOW", "SWAMP", "VALLEY", "CLIFF", "ECLIPSE", "AURORA", "TORNADO", "TSUNAMI", "AVALANCHE", "DROUGHT", "MONSOON", "TECTONIC", "SOLSTICE", "EQUINOX", "NATURE"];
+const THINGS = ["BALL", "BOOK", "DOOR", "CHAIR", "TABLE", "CLOCK", "PHONE", "LAMP", "CUP", "BOX", "KEY", "KNIFE", "FORK", "SPOON", "BOWL", "BAG", "HAT", "SHOE", "RING", "COIN", "MIRROR", "PILLOW", "BLANKET", "WINDOW", "CANDLE", "PENCIL", "HAMMER", "WHEEL", "ROPE", "CAMERA", "COMPASS", "TELESCOPE", "LANTERN", "ANCHOR", "TROPHY", "UMBRELLA", "PUZZLE", "MAGNET", "BRIEFCASE", "CALENDAR", "NOTEBOOK", "ENVELOPE", "FLASHLIGHT", "BINOCULARS", "THING"];
+const PLACES = ["PARK", "SCHOOL", "STORE", "FARM", "CASTLE", "CAVE", "ISLAND", "CITY", "TOWN", "BRIDGE", "CHURCH", "GARDEN", "ZOO", "LIGHTHOUSE", "PYRAMID", "STADIUM", "MUSEUM", "AIRPORT", "HARBOUR", "GREENHOUSE", "CEMETERY", "LABYRINTH", "PLACE"];
+const ACTIONS = ["JUMP", "RUN", "SWIM", "SLEEP", "DREAM", "SMILE", "LAUGH", "CRY", "DANCE", "SING", "VOYAGE", "RESCUE", "ADVENTURE", "ACTION"];
+const FEELINGS = ["SHADOW", "ECHO", "LEGEND", "MYSTERY", "SECRET", "RIDDLE", "MAGIC", "JEALOUSY", "NOSTALGIA", "CURIOSITY", "BOREDOM", "ANXIETY", "COURAGE", "PATIENCE", "GUILT", "PRIDE", "ENVY", "REGRET", "WONDER", "FURY", "BLISS", "DREAD", "IRONY", "KARMA", "CHAOS", "FATE", "PARADOX", "EUPHORIA", "SOLITUDE", "SERENITY", "FEELING"];
+const SCIENCE = ["COMPASS", "TELESCOPE", "CALCULATOR", "THERMOMETER", "MAGNET", "PHOTON", "QUASAR", "NEBULA", "ATOM", "CELL", "DATA", "ENERGY", "LAB", "LASER", "LOGIC", "MATTER", "ROBOT", "SCIENCE", "TECH", "TEST", "THEORY", "VOLTAGE", "SYMBIOSIS", "OSMOSIS", "TAXONOMY", "ELECTRODE", "CHROMOSOME", "TECTONIC", "SOLSTICE", "EQUINOX", "ECLIPSE"];
+const SPORTS = ["BALL", "RACE", "TEAM", "GOAL", "RUN", "SWIM", "JUMP", "COURT", "MATCH", "SCORE", "TROPHY", "MEDAL", "COACH", "SPORT", "GAME", "PLAY", "WIN", "BIKE", "SKI", "GOLF", "FIGHT", "BOXING", "SOCCER", "TENNIS", "HOCKEY", "RACING", "STADIUM", "PARADE", "CARNIVAL"];
+const MUSIC = ["SONG", "BAND", "BEAT", "NOTE", "TUNE", "MUSIC", "SING", "DANCE", "DRUM", "PIANO", "GUITAR", "VIOLIN", "RADIO", "CONCERT", "ALBUM", "LYRICS", "MELODY", "RHYTHM", "SOUND", "VOICE", "CHOIR", "ORCHESTRA", "JAZZ", "BLUES", "OPERA", "ART", "STAGE", "SHOW"];
+const TRAVEL = ["TRIP", "MAP", "ROAD", "CAR", "BOAT", "FLIGHT", "HOTEL", "BEACH", "MOUNTAIN", "ISLAND", "CITY", "PARK", "TRAVEL", "TOUR", "JOURNEY", "VOYAGE", "ADVENTURE", "PASSPORT", "SUITCASE", "AIRPORT", "HARBOUR", "BRIDGE", "CASTLE", "TEMPLE", "FOREST", "RIVER", "LAKE", "DESERT", "VALLEY", "CANYON", "LIGHTHOUSE", "CAMP"];
+
+const CATEGORY_POOLS = {
+  all: [],
+  mixed: [],
+  animals: [...new Set(ANIMALS)],
+  food: [...new Set(FOOD)],
+  nature: [...new Set(NATURE)],
+  things: [...new Set(THINGS)],
+  places: [...new Set(PLACES)],
+  actions: [...new Set(ACTIONS)],
+  feelings: [...new Set(FEELINGS)],
+  science: [...new Set(SCIENCE)],
+  sports: [...new Set(SPORTS)],
+  music: [...new Set(MUSIC)],
+  travel: [...new Set(TRAVEL)]
+};
+
+// all = full list; mixed = same as all (curated mix)
+CATEGORY_POOLS.all = [...ALL_WORDS];
+CATEGORY_POOLS.mixed = [...ALL_WORDS];
+
+export function getWordList(count = 10, category = "all") {
+  const pool = (CATEGORY_POOLS[category] && CATEGORY_POOLS[category].length > 0)
+    ? [...CATEGORY_POOLS[category]]
+    : [...ALL_WORDS];
   for (let index = pool.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
     [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
   }
-  return pool.slice(0, count);
+  return pool.slice(0, Math.min(count, pool.length));
 }

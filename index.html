@@ -33,7 +33,10 @@
         <div class="home-panel">
           <div class="home-panel-head">
             <span class="label">Room Setup</span>
-            <button class="copy-btn" id="btn-random-name" title="Randomize name">Random Name</button>
+            <div class="home-panel-actions">
+              <button class="copy-btn preset-btn" id="btn-quick-game" title="Set 5 rounds, 20s">Quick game</button>
+              <button class="copy-btn" id="btn-random-name" title="Randomize name">Random Name</button>
+            </div>
           </div>
           <div class="name-field-wrap">
             <label class="label" for="player-name">Your Name</label>
@@ -46,14 +49,35 @@
                 <option value="5">5</option>
                 <option value="10" selected>10</option>
                 <option value="15">15</option>
+                <option value="20">20</option>
               </select>
             </label>
             <label class="setup-item">
               <span class="label">Timer</span>
               <select id="settings-timer" class="setup-select">
+                <option value="15000">15s</option>
                 <option value="20000">20s</option>
                 <option value="30000" selected>30s</option>
                 <option value="45000">45s</option>
+                <option value="60000">60s</option>
+              </select>
+            </label>
+            <label class="setup-item setup-item-full">
+              <span class="label">Word theme</span>
+              <select id="settings-category" class="setup-select" title="Word category for this game">
+                <option value="all" selected>All words</option>
+                <option value="mixed">Mixed (curated)</option>
+                <option value="animals">Animals</option>
+                <option value="food">Food & drink</option>
+                <option value="nature">Nature & weather</option>
+                <option value="things">Objects & things</option>
+                <option value="places">Places</option>
+                <option value="actions">Actions & verbs</option>
+                <option value="feelings">Feelings & ideas</option>
+                <option value="science">Science & tech</option>
+                <option value="sports">Sports & games</option>
+                <option value="music">Music & arts</option>
+                <option value="travel">Travel & adventure</option>
               </select>
             </label>
           </div>
@@ -73,7 +97,7 @@
           <span class="label">How It Works</span>
           <p>Everyone sees the same secret word. Submit one clue before the timer ends. Matching clues score points together.</p>
         </div>
-        <p class="home-hint">2 to 8 players, live rooms, no account needed</p>
+        <p class="home-hint">2 to 16 players, live rooms, no account needed</p>
       </div>
     </div>
 
@@ -91,7 +115,7 @@
         <div class="lobby-meta">
           <div class="meta-pill">
             <span class="label">Players</span>
-            <strong id="lobby-player-count">1 / 8</strong>
+            <strong id="lobby-player-count">1 / 16</strong>
           </div>
           <div class="meta-pill">
             <span class="label">Host</span>
@@ -109,39 +133,44 @@
 
     <div id="screen-game" class="screen">
       <div class="game-header">
-        <button class="btn btn-ghost btn-leave-in-game" id="btn-leave-game" type="button" title="Leave game">Leave</button>
-        <div class="round-info">
-          <span class="label">Round</span>
-          <span id="round-num" class="round-num">1</span>
-          <span class="round-of">/ <span id="round-total">10</span></span>
-        </div>
+        <div class="game-header-top">
+          <button class="btn btn-ghost btn-leave-in-game" id="btn-leave-game" type="button" title="Leave game">Leave</button>
+          <div class="round-info">
+            <span class="label">Round</span>
+            <span id="round-num" class="round-num">1</span>
+            <span class="round-of">/ <span id="round-total">10</span></span>
+          </div>
 
-        <div class="score-display">
-          <div class="score-item">
-            <span class="label">You</span>
-            <span id="score-me" class="score-val">0</span>
+          <div class="score-display">
+            <div class="score-item">
+              <span class="label">You</span>
+              <span id="score-me" class="score-val">0</span>
+            </div>
+            <div class="score-item">
+              <span class="label">Leader</span>
+              <span id="score-leader" class="score-val">0</span>
+            </div>
+            <div class="score-item">
+              <span class="label">Players</span>
+              <span id="player-count" class="score-val">2</span>
+            </div>
+            <div class="score-item">
+              <span class="label">Timer</span>
+              <span id="round-timer" class="score-val">30</span>
+            </div>
           </div>
-          <div class="score-item">
-            <span class="label">Leader</span>
-            <span id="score-leader" class="score-val">0</span>
-          </div>
-          <div class="score-item">
-            <span class="label">Players</span>
-            <span id="player-count" class="score-val">2</span>
-          </div>
-          <div class="score-item">
-            <span class="label">Timer</span>
-            <span id="round-timer" class="score-val">30</span>
-          </div>
-        </div>
 
-        <div class="streak-badge hidden" id="streak-badge">Streak <span id="streak-num">0</span></div>
+          <div class="streak-badge hidden" id="streak-badge">Streak <span id="streak-num">0</span></div>
+        </div>
+        <p class="game-header-meaning hidden" id="game-header-meaning" aria-label="Meaning of the secret word"></p>
       </div>
 
       <div class="game-body">
         <div class="secret-word-area">
           <span class="label">Secret Word</span>
           <div class="secret-word" id="secret-word">---</div>
+          <p class="secret-word-meaning hidden" id="secret-word-meaning" aria-label="Meaning of the word"></p>
+          <span class="game-theme hidden" id="game-theme"></span>
         </div>
 
         <div class="clue-entry" id="clue-entry">
