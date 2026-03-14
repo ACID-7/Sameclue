@@ -52,6 +52,8 @@ const elements = {
   btnReady: document.getElementById("btn-ready"),
   btnStart: document.getElementById("btn-start"),
   btnLeaveLobby: document.getElementById("btn-leave-lobby"),
+  btnLeaveGame: document.getElementById("btn-leave-game"),
+  btnLeaveReveal: document.getElementById("btn-leave-reveal"),
   btnSubmitClue: document.getElementById("btn-submit-clue"),
   btnNextRound: document.getElementById("btn-next-round"),
   btnPlayAgain: document.getElementById("btn-play-again"),
@@ -87,6 +89,7 @@ const elements = {
   revealCluesList: document.getElementById("reveal-clues-list"),
   revealScoreMe: document.getElementById("reveal-score-me"),
   revealScoreLeader: document.getElementById("reveal-score-leader"),
+  revealWaitingCopy: document.getElementById("reveal-waiting-copy"),
   finalTrophy: document.getElementById("final-trophy"),
   finalTitle: document.getElementById("final-title"),
   finalSubtitle: document.getElementById("final-subtitle"),
@@ -112,6 +115,7 @@ let deadlineTimeoutId = null;
 let disconnectHandlers = [];
 let disconnectRefreshSignature = "";
 let roomActionInFlight = false;
+let leaveInProgress = false;
 
 function showScreen(id) {
   currentScreen = id;
@@ -131,6 +135,13 @@ function showToast(message, duration = 2200) {
   toastTimeoutId = window.setTimeout(() => {
     elements.toast.classList.remove("show");
   }, duration);
+}
+
+function escapeHtml(text) {
+  if (text == null || text === "") return "";
+  const div = document.createElement("div");
+  div.textContent = String(text);
+  return div.innerHTML;
 }
 
 function sanitizePlayerName(value) {
@@ -533,7 +544,7 @@ function renderLobby(data) {
     }
     card.innerHTML = `
       <div class="slot-dot"></div>
-      <strong>${player.name}</strong>
+      <strong>${escapeHtml(player.name)}</strong>
       <span class="slot-role">${player.id === playerId ? "You" : "Joined"}${player.id === data.hostId ? " | Host" : ""}</span>
       <span class="slot-state">${player.ready ? "Ready" : "Waiting"}</span>
     `;
@@ -689,16 +700,27 @@ function renderReveal(data) {
     }
     card.innerHTML = `
       <div class="reveal-player">
-        <strong>${player.name}</strong>
+        <strong>${escapeHtml(player.name)}</strong>
         <span>${player.id === playerId ? "You" : `Score ${data.scores?.[player.id] || 0}`}</span>
       </div>
-      <div class="reveal-clue">${roundData[player.id] || "No clue"}</div>
+      <div class="reveal-clue">${escapeHtml(roundData[player.id] || "No clue")}</div>
     `;
     elements.revealCluesList.appendChild(card);
   }
 
-  elements.btnNextRound.classList.toggle("hidden", data.hostId !== playerId);
-  elements.btnNextRound.textContent = data.round >= getRoomTotalRounds(data) ? "See Results" : "Next Round";
+  const isHost = data.hostId === playerId;
+  const isLastRound = data.round >= getRoomTotalRounds(data);
+  elements.btnNextRound.classList.toggle("hidden", !isHost);
+  elements.btnNextRound.textContent = isLastRound ? "See Results" : "Next Round";
+  if (elements.revealWaitingCopy) {
+    elements.revealWaitingCopy.classList.toggle("hidden", isHost);
+    elements.revealWaitingCopy.textContent = isLastRound
+      ? "Waiting for the host to show final results…"
+      : "Waiting for the host to start the next round…";
+  }
+  if (elements.btnLeaveReveal) {
+    elements.btnLeaveReveal.classList.remove("hidden");
+  }
 }
 
 function renderFinal(data) {
@@ -744,7 +766,7 @@ function renderFinal(data) {
     row.innerHTML = `
       <div class="leaderboard-rank">#${index + 1}</div>
       <div class="leaderboard-name">
-        <strong>${player.name}</strong>
+        <strong>${escapeHtml(player.name)}</strong>
         <span>${player.id === data.hostId ? "Host" : "Player"}</span>
       </div>
       <div class="leaderboard-score">${player.score}</div>
@@ -761,7 +783,7 @@ async function evaluateRound(data) {
   evaluationInFlight = true;
 
   try {
-    await runTransaction(roomRef, (room) => {
+    const result = await runTransaction(roomRef, (room) => {
       if (!room || room.status !== "playing" || room.hostId !== playerId) {
         return room;
       }
@@ -781,6 +803,16 @@ async function evaluateRound(data) {
         ...buildRoundResult(room)
       };
     });
+    // Ensure host sees reveal screen: re-fetch and render if we committed and status is reveal
+    if (result?.committed && roomRef) {
+      const snap = await get(roomRef);
+      if (snap.exists()) {
+        const updated = snap.val();
+        if (updated?.status === "reveal") {
+          handleRoomUpdate(updated);
+        }
+      }
+    }
   } finally {
     evaluationInFlight = false;
   }
@@ -854,6 +886,7 @@ function handleRoomUpdate(data) {
   }
   if (data.status === "gameover") {
     renderFinal(data);
+    return;
   }
 }
 
@@ -909,55 +942,57 @@ async function createRoom() {
     return;
   }
   setRoomActionState(true);
-  const playerName = savePlayerName();
-  const settings = saveSettings();
-  playerId = generatePlayerId();
-  const players = {
-    [playerId]: {
-      name: playerName,
-      joinedAt: Date.now(),
-      ready: true
-    }
-  };
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const candidateCode = generateRoomCode();
-    const candidateRef = ref(db, `rooms/${candidateCode}`);
-    const result = await runTransaction(candidateRef, (room) => {
-      if (room) {
-        return undefined;
+  try {
+    const playerName = savePlayerName();
+    const settings = saveSettings();
+    playerId = generatePlayerId();
+    const players = {
+      [playerId]: {
+        name: playerName,
+        joinedAt: Date.now(),
+        ready: true
       }
-      return {
-        status: "lobby",
-        hostId: playerId,
-        players,
-        playerOrder: [playerId],
-        scores: { [playerId]: 0 },
-        round: 1,
-        words: getWordList(settings.totalRounds),
-        settings,
-        streak: 0,
-        bestStreak: 0,
-        totalMatches: 0,
-        resolvedRound: 0,
-        roundDeadline: null,
-        created: Date.now(),
-        ...createResetRounds()
-      };
-    });
+    };
 
-    if (result.committed) {
-      roomCode = candidateCode;
-      roomRef = candidateRef;
-      saveLastRoomCode(roomCode);
-      setRoomActionState(false);
-      enterRoom();
-      return;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const candidateCode = generateRoomCode();
+      const candidateRef = ref(db, `rooms/${candidateCode}`);
+      const result = await runTransaction(candidateRef, (room) => {
+        if (room) {
+          return undefined;
+        }
+        return {
+          status: "lobby",
+          hostId: playerId,
+          players,
+          playerOrder: [playerId],
+          scores: { [playerId]: 0 },
+          round: 1,
+          words: getWordList(settings.totalRounds),
+          settings,
+          streak: 0,
+          bestStreak: 0,
+          totalMatches: 0,
+          resolvedRound: 0,
+          roundDeadline: null,
+          created: Date.now(),
+          ...createResetRounds()
+        };
+      });
+
+      if (result.committed) {
+        roomCode = candidateCode;
+        roomRef = candidateRef;
+        saveLastRoomCode(roomCode);
+        enterRoom();
+        return;
+      }
     }
-  }
 
-  setRoomActionState(false);
-  showToast("Could not create a room. Try again.");
+    showToast("Could not create a room. Try again.");
+  } finally {
+    setRoomActionState(false);
+  }
 }
 
 async function joinRoomByCode(rawCode) {
@@ -965,81 +1000,79 @@ async function joinRoomByCode(rawCode) {
     return;
   }
   setRoomActionState(true);
-  const playerName = savePlayerName();
-  const code = (rawCode || "").trim().toUpperCase();
-  if (code.length < 4) {
-    setRoomActionState(false);
-    showToast("Enter a valid room code.");
-    return;
-  }
-
-  const joinRef = ref(db, `rooms/${code}`);
-  const snapshot = await get(joinRef);
-
-  if (!snapshot.exists()) {
-    setRoomActionState(false);
-    showToast("Room not found.");
-    return;
-  }
-
-  const data = snapshot.val();
-  const playerOrder = getOrderedPlayerIds(data);
-
-  if (data.status !== "lobby") {
-    setRoomActionState(false);
-    showToast("This room has already started.");
-    return;
-  }
-  if (playerOrder.length >= MAX_PLAYERS) {
-    setRoomActionState(false);
-    showToast("This room is full.");
-    return;
-  }
-
-  const nextPlayerId = generatePlayerId();
-  const result = await runTransaction(joinRef, (room) => {
-    if (!room || room.status !== "lobby") {
-      return room;
+  try {
+    const playerName = savePlayerName();
+    const code = (rawCode || "").trim().toUpperCase();
+    if (code.length < 4) {
+      showToast("Enter a valid room code.");
+      return;
     }
 
-    const liveOrder = Array.isArray(room.playerOrder) ? room.playerOrder.filter((id) => room.players?.[id]) : [];
-    if (liveOrder.length >= MAX_PLAYERS) {
-      return room;
+    const joinRef = ref(db, `rooms/${code}`);
+    const snapshot = await get(joinRef);
+
+    if (!snapshot.exists()) {
+      showToast("Room not found.");
+      return;
     }
 
-    const nextOrder = [...liveOrder, nextPlayerId];
-    return {
-      ...room,
-      playerOrder: nextOrder,
-      players: {
-        ...(room.players || {}),
-        [nextPlayerId]: {
-          name: playerName,
-          joinedAt: Date.now(),
-          ready: false
-        }
-      },
-      scores: {
-        ...(room.scores || {}),
-        [nextPlayerId]: 0
+    const data = snapshot.val();
+    const playerOrder = getOrderedPlayerIds(data);
+
+    if (data.status !== "lobby") {
+      showToast("This room has already started.");
+      return;
+    }
+    if (playerOrder.length >= MAX_PLAYERS) {
+      showToast("This room is full.");
+      return;
+    }
+
+    const nextPlayerId = generatePlayerId();
+    const result = await runTransaction(joinRef, (room) => {
+      if (!room || room.status !== "lobby") {
+        return room;
       }
-    };
-  });
 
-  const nextRoom = result.snapshot.val();
-  const joined = Boolean(nextRoom?.players?.[nextPlayerId]);
-  if (!result.committed || !joined) {
+      const liveOrder = Array.isArray(room.playerOrder) ? room.playerOrder.filter((id) => room.players?.[id]) : [];
+      if (liveOrder.length >= MAX_PLAYERS) {
+        return room;
+      }
+
+      const nextOrder = [...liveOrder, nextPlayerId];
+      return {
+        ...room,
+        playerOrder: nextOrder,
+        players: {
+          ...(room.players || {}),
+          [nextPlayerId]: {
+            name: playerName,
+            joinedAt: Date.now(),
+            ready: false
+          }
+        },
+        scores: {
+          ...(room.scores || {}),
+          [nextPlayerId]: 0
+        }
+      };
+    });
+
+    const nextRoom = result.snapshot.val();
+    const joined = Boolean(nextRoom?.players?.[nextPlayerId]);
+    if (!result.committed || !joined) {
+      showToast(nextRoom?.status === "lobby" ? "This room is full." : "This room has already started.");
+      return;
+    }
+
+    playerId = nextPlayerId;
+    roomCode = code;
+    roomRef = joinRef;
+    saveLastRoomCode(roomCode);
+    enterRoom();
+  } finally {
     setRoomActionState(false);
-    showToast(nextRoom?.status === "lobby" ? "This room is full." : "This room has already started.");
-    return;
   }
-
-  playerId = nextPlayerId;
-  roomCode = code;
-  roomRef = joinRef;
-  saveLastRoomCode(roomCode);
-  setRoomActionState(false);
-  enterRoom();
 }
 
 async function joinRoom() {
@@ -1060,70 +1093,71 @@ async function quickJoinLastRoom() {
 }
 
 async function leaveRoom() {
-  if (roomActionInFlight) {
+  if (leaveInProgress) {
     return;
   }
+  leaveInProgress = true;
   setRoomActionState(true);
-  if (!roomCode || !playerId || !roomRef) {
-    setRoomActionState(false);
+  try {
+    if (!roomCode || !playerId || !roomRef) {
+      resetSession();
+      return;
+    }
+
+    const snapshot = await get(roomRef);
+    if (!snapshot.exists()) {
+      resetSession();
+      return;
+    }
+
+    const data = snapshot.val();
+    const playerOrder = getOrderedPlayerIds(data);
+    if (!playerOrder.includes(playerId)) {
+      resetSession();
+      return;
+    }
+
+    const remainingOrder = playerOrder.filter((id) => id !== playerId);
+    if (remainingOrder.length === 0) {
+      await remove(roomRef);
+      resetSession();
+      return;
+    }
+
+    const updates = {
+      [`players/${playerId}`]: null,
+      [`scores/${playerId}`]: null,
+      playerOrder: remainingOrder
+    };
+
+    if (data.hostId === playerId) {
+      updates.hostId = remainingOrder[0];
+    }
+
+    for (let round = 1; round <= ROUND_KEYS_LIMIT; round += 1) {
+      updates[`${getRoundKey(round)}/${playerId}`] = null;
+    }
+
+    const activeGame = data.status === "playing" || data.status === "reveal";
+    if (activeGame || remainingOrder.length < MIN_PLAYERS) {
+      const remainingPlayersData = remainingOrder.reduce((acc, id) => {
+        acc[id] = data.players[id];
+        return acc;
+      }, {});
+      Object.assign(updates, buildLobbyReset({
+        ...data,
+        hostId: updates.hostId || data.hostId,
+        playerOrder: remainingOrder,
+        players: remainingPlayersData
+      }));
+    }
+
+    await update(roomRef, updates);
     resetSession();
-    return;
-  }
-
-  const snapshot = await get(roomRef);
-  if (!snapshot.exists()) {
+  } finally {
+    leaveInProgress = false;
     setRoomActionState(false);
-    resetSession();
-    return;
   }
-
-  const data = snapshot.val();
-  const playerOrder = getOrderedPlayerIds(data);
-  if (!playerOrder.includes(playerId)) {
-    setRoomActionState(false);
-    resetSession();
-    return;
-  }
-
-  const remainingOrder = playerOrder.filter((id) => id !== playerId);
-  if (remainingOrder.length === 0) {
-    await remove(roomRef);
-    setRoomActionState(false);
-    resetSession();
-    return;
-  }
-
-  const updates = {
-    [`players/${playerId}`]: null,
-    [`scores/${playerId}`]: null,
-    playerOrder: remainingOrder
-  };
-
-  if (data.hostId === playerId) {
-    updates.hostId = remainingOrder[0];
-  }
-
-  for (let round = 1; round <= ROUND_KEYS_LIMIT; round += 1) {
-    updates[`${getRoundKey(round)}/${playerId}`] = null;
-  }
-
-  const activeGame = data.status === "playing" || data.status === "reveal";
-  if (activeGame || remainingOrder.length < MIN_PLAYERS) {
-    const remainingPlayersData = remainingOrder.reduce((acc, id) => {
-      acc[id] = data.players[id];
-      return acc;
-    }, {});
-    Object.assign(updates, buildLobbyReset({
-      ...data,
-      hostId: updates.hostId || data.hostId,
-      playerOrder: remainingOrder,
-      players: remainingPlayersData
-    }));
-  }
-
-  await update(roomRef, updates);
-  setRoomActionState(false);
-  resetSession();
 }
 
 async function submitClue() {
@@ -1201,25 +1235,28 @@ async function startGame() {
   }
 
   setRoomActionState(true);
-  await runTransaction(roomRef, (room) => {
-    if (!room || room.status !== "lobby" || room.hostId !== playerId) {
-      return room;
-    }
-    const livePlayers = getOrderedPlayers(room);
-    if (livePlayers.length < MIN_PLAYERS || !livePlayers.every((player) => player.ready)) {
-      return room;
-    }
+  try {
+    await runTransaction(roomRef, (room) => {
+      if (!room || room.status !== "lobby" || room.hostId !== playerId) {
+        return room;
+      }
+      const livePlayers = getOrderedPlayers(room);
+      if (livePlayers.length < MIN_PLAYERS || !livePlayers.every((player) => player.ready)) {
+        return room;
+      }
 
-    return {
-      ...room,
-      ...buildLobbyReset(room, {
-        status: "playing",
-        roundDeadline: createRoundDeadline(room),
-        activeRoster: getOrderedPlayerIds(room)
-      })
-    };
-  });
-  setRoomActionState(false);
+      return {
+        ...room,
+        ...buildLobbyReset(room, {
+          status: "playing",
+          roundDeadline: createRoundDeadline(room),
+          activeRoster: getOrderedPlayerIds(room)
+        })
+      };
+    });
+  } finally {
+    setRoomActionState(false);
+  }
 }
 
 async function goToNextRound() {
@@ -1231,31 +1268,34 @@ async function goToNextRound() {
   }
 
   setRoomActionState(true);
-  await runTransaction(roomRef, (room) => {
-    if (!room || room.hostId !== playerId) {
-      return room;
-    }
-    if (room.status !== "reveal") {
-      return room;
-    }
-    if ((room.round || 1) >= getRoomTotalRounds(room)) {
+  try {
+    await runTransaction(roomRef, (room) => {
+      if (!room || room.hostId !== playerId) {
+        return room;
+      }
+      if (room.status !== "reveal") {
+        return room;
+      }
+      if ((room.round || 1) >= getRoomTotalRounds(room)) {
+        return {
+          ...room,
+          status: "gameover"
+        };
+      }
+
       return {
         ...room,
-        status: "gameover"
+        status: "playing",
+        round: (room.round || 1) + 1,
+        resolvedRound: room.round,
+        lastResult: null,
+        roundDeadline: createRoundDeadline(room),
+        activeRoster: getOrderedPlayerIds(room)
       };
-    }
-
-    return {
-      ...room,
-      status: "playing",
-      round: (room.round || 1) + 1,
-      resolvedRound: room.round,
-      lastResult: null,
-      roundDeadline: createRoundDeadline(room),
-      activeRoster: getOrderedPlayerIds(room)
-    };
-  });
-  setRoomActionState(false);
+    });
+  } finally {
+    setRoomActionState(false);
+  }
 }
 
 async function playAgain() {
@@ -1278,32 +1318,35 @@ async function playAgain() {
   }
 
   setRoomActionState(true);
-  await runTransaction(roomRef, (room) => {
-    if (!room || room.hostId !== playerId) {
-      return room;
-    }
-    const livePlayerIds = getOrderedPlayerIds(room);
-    if (livePlayerIds.length < MIN_PLAYERS) {
-      return room;
-    }
-    const readyPlayers = Object.fromEntries(livePlayerIds.map((id) => [
-      id,
-      {
-        ...room.players[id],
-        ready: id === playerId
+  try {
+    await runTransaction(roomRef, (room) => {
+      if (!room || room.hostId !== playerId) {
+        return room;
       }
-    ]));
+      const livePlayerIds = getOrderedPlayerIds(room);
+      if (livePlayerIds.length < MIN_PLAYERS) {
+        return room;
+      }
+      const readyPlayers = Object.fromEntries(livePlayerIds.map((id) => [
+        id,
+        {
+          ...room.players[id],
+          ready: id === playerId
+        }
+      ]));
 
-    return {
-      ...room,
-      ...buildLobbyReset({
+      return {
         ...room,
+        ...buildLobbyReset({
+          ...room,
+          players: readyPlayers
+        }),
         players: readyPlayers
-      }),
-      players: readyPlayers
-    };
-  });
-  setRoomActionState(false);
+      };
+    });
+  } finally {
+    setRoomActionState(false);
+  }
 }
 
 async function toggleReady() {
@@ -1311,22 +1354,25 @@ async function toggleReady() {
     return;
   }
   setRoomActionState(true);
-  await runTransaction(roomRef, (room) => {
-    if (!room || room.status !== "lobby" || !room.players?.[playerId]) {
-      return room;
-    }
-    return {
-      ...room,
-      players: {
-        ...room.players,
-        [playerId]: {
-          ...room.players[playerId],
-          ready: !Boolean(room.players[playerId].ready)
-        }
+  try {
+    await runTransaction(roomRef, (room) => {
+      if (!room || room.status !== "lobby" || !room.players?.[playerId]) {
+        return room;
       }
-    };
-  });
-  setRoomActionState(false);
+      return {
+        ...room,
+        players: {
+          ...room.players,
+          [playerId]: {
+            ...room.players[playerId],
+            ready: !Boolean(room.players[playerId].ready)
+          }
+        }
+      };
+    });
+  } finally {
+    setRoomActionState(false);
+  }
 }
 
 async function shareRoom() {
@@ -1427,6 +1473,16 @@ elements.btnStart.addEventListener("click", () => {
 elements.btnLeaveLobby.addEventListener("click", () => {
   void leaveRoom();
 });
+if (elements.btnLeaveGame) {
+  elements.btnLeaveGame.addEventListener("click", () => {
+    void leaveRoom();
+  });
+}
+if (elements.btnLeaveReveal) {
+  elements.btnLeaveReveal.addEventListener("click", () => {
+    void leaveRoom();
+  });
+}
 
 elements.btnSubmitClue.addEventListener("click", () => {
   void submitClue();

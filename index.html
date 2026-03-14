@@ -109,6 +109,7 @@
 
     <div id="screen-game" class="screen">
       <div class="game-header">
+        <button class="btn btn-ghost btn-leave-in-game" id="btn-leave-game" type="button" title="Leave game">Leave</button>
         <div class="round-info">
           <span class="label">Round</span>
           <span id="round-num" class="round-num">1</span>
@@ -181,7 +182,9 @@
           <span>Leader: <strong id="reveal-score-leader">0</strong></span>
         </div>
 
+        <p class="reveal-waiting-copy hidden" id="reveal-waiting-copy">Waiting for the host to start the next round…</p>
         <button class="btn btn-primary" id="btn-next-round">Next Round</button>
+        <button class="btn btn-ghost" id="btn-leave-reveal">Leave Game</button>
       </div>
     </div>
 

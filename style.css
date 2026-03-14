@@ -677,6 +677,17 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.reveal-waiting-copy {
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+  margin: 8px 0 0;
+}
+
+#screen-reveal .btn-ghost {
+  margin-top: 12px;
+}
+
 .final-header {
   text-align: center;
 }
