@@ -209,7 +209,6 @@
           <div class="secret-word-area">
             <span class="label">Secret Word</span>
             <div class="secret-word" id="secret-word">---</div>
-            <p class="secret-word-meaning hidden" id="secret-word-meaning" aria-label="Meaning of the word"></p>
             <span class="game-theme hidden" id="game-theme"></span>
           </div>
 
@@ -242,7 +241,16 @@
 
         <div class="reveal-result">
           <div class="result-badge" id="result-badge">MATCH</div>
+          <p class="reveal-round-summary hidden" id="reveal-round-summary"></p>
           <div class="result-points" id="result-points">Matching clues earn 2 points.</div>
+        </div>
+
+        <div class="reveal-reactions" id="reveal-reactions">
+          <span class="label">React</span>
+          <button type="button" class="btn-reaction" data-reaction="👍" title="Nice">👍</button>
+          <button type="button" class="btn-reaction" data-reaction="🎯" title="On point">🎯</button>
+          <button type="button" class="btn-reaction" data-reaction="😂" title="Funny">😂</button>
+          <button type="button" class="btn-reaction" data-reaction="🙌" title="Amazing">🙌</button>
         </div>
 
         <div class="reveal-clues-list" id="reveal-clues-list"></div>

@@ -10,7 +10,6 @@ import {
   update
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getWordList, CATEGORY_OPTIONS } from "./words.js";
-import { getWordMeaning } from "./wordMeanings.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAretLJexB_PRmp9mZtjyiWy9BiNDpkyVc",
@@ -87,7 +86,6 @@ const elements = {
   streakBadge: document.getElementById("streak-badge"),
   streakNum: document.getElementById("streak-num"),
   secretWord: document.getElementById("secret-word"),
-  secretWordMeaning: document.getElementById("secret-word-meaning"),
   gameTheme: document.getElementById("game-theme"),
   clueEntry: document.getElementById("clue-entry"),
   clueInput: document.getElementById("clue-input"),
@@ -100,6 +98,8 @@ const elements = {
   revealCluesList: document.getElementById("reveal-clues-list"),
   revealScoreMe: document.getElementById("reveal-score-me"),
   revealScoreLeader: document.getElementById("reveal-score-leader"),
+  revealRoundSummary: document.getElementById("reveal-round-summary"),
+  revealReactions: document.getElementById("reveal-reactions"),
   revealWaitingCopy: document.getElementById("reveal-waiting-copy"),
   finalTrophy: document.getElementById("final-trophy"),
   finalTitle: document.getElementById("final-title"),
@@ -127,6 +127,7 @@ let disconnectHandlers = [];
 let disconnectRefreshSignature = "";
 let roomActionInFlight = false;
 let leaveInProgress = false;
+let lastStreakMilestoneShown = 0;
 
 function showScreen(id) {
   currentScreen = id;
@@ -137,6 +138,7 @@ function showScreen(id) {
 }
 
 function showToast(message, duration = 2200) {
+  if (!elements.toast) return;
   elements.toast.textContent = message;
   elements.toast.classList.remove("hidden");
   elements.toast.classList.add("show");
@@ -144,7 +146,7 @@ function showToast(message, duration = 2200) {
     window.clearTimeout(toastTimeoutId);
   }
   toastTimeoutId = window.setTimeout(() => {
-    elements.toast.classList.remove("show");
+    if (elements.toast) elements.toast.classList.remove("show");
   }, duration);
 }
 
@@ -396,6 +398,7 @@ function getRoundKey(round) {
 }
 
 function getOrderedPlayerIds(data) {
+  if (!data) return [];
   const order = Array.isArray(data.playerOrder) ? data.playerOrder : [];
   const byOrder = order.filter((id) => data.players?.[id]);
   const allPlayerIds = new Set([...byOrder, ...Object.keys(data.players || {})]);
@@ -409,16 +412,16 @@ function getOrderedPlayerIds(data) {
 function getOrderedPlayers(data) {
   return getOrderedPlayerIds(data).map((id) => ({
     id,
-    ...data.players[id]
+    ...(data?.players?.[id] || {})
   }));
 }
 
 function getPlayerName(id, data) {
-  return data.players?.[id]?.name || "Player";
+  return data?.players?.[id]?.name || "Player";
 }
 
-function getRoundData(data, round = data.round) {
-  return data[getRoundKey(round)] || {};
+function getRoundData(data, round = data?.round) {
+  return data?.[getRoundKey(round)] || {};
 }
 
 function countSubmittedPlayers(data) {
@@ -426,7 +429,7 @@ function countSubmittedPlayers(data) {
 }
 
 function getLeaderScore(data) {
-  return Math.max(0, ...Object.values(data.scores || {}));
+  return Math.max(0, ...Object.values(data?.scores || {}));
 }
 
 function buildRoundResult(data) {
@@ -500,12 +503,19 @@ function clearRoundTimer() {
 
 function updateRoundTimer(deadline) {
   if (!deadline) {
-    elements.roundTimer.textContent = "--";
+    if (elements.roundTimer) {
+      elements.roundTimer.textContent = "--";
+      elements.roundTimer.classList.remove("timer-low");
+    }
     return;
   }
 
   const remainingMs = Math.max(0, deadline - Date.now());
-  elements.roundTimer.textContent = String(Math.ceil(remainingMs / 1000));
+  const seconds = Math.ceil(remainingMs / 1000);
+  if (elements.roundTimer) {
+    elements.roundTimer.textContent = String(seconds);
+    elements.roundTimer.classList.toggle("timer-low", seconds <= 5 && seconds > 0);
+  }
 }
 
 function startRoundTimer(deadline) {
@@ -600,6 +610,7 @@ function resetSession() {
   submitInFlight = false;
   elements.clueInput.value = "";
   clearRoomSession();
+  lastStreakMilestoneShown = 0;
   refreshQuickJoinButton();
   showScreen("screen-home");
 }
@@ -612,7 +623,7 @@ function renderLobby(data) {
   const players = getOrderedPlayers(data);
   const hostName = getPlayerName(data.hostId, data);
   const isHost = data.hostId === playerId;
-  const allReady = players.length >= MIN_PLAYERS && players.every((player) => player.ready);
+  const allReady = players.length >= 1 && players.every((player) => player.ready);
   const meReady = Boolean(data.players?.[playerId]?.ready);
 
   const maxPlayers = getRoomMaxPlayers(data);
@@ -656,9 +667,7 @@ function renderLobby(data) {
     elements.playerSlots.appendChild(empty);
   }
 
-  if (players.length < MIN_PLAYERS) {
-    elements.lobbyStatus.textContent = `Need at least 2 players to start. ${getRoomSettingsSummary(data)}`;
-  } else if (!allReady) {
+  if (!allReady) {
     elements.lobbyStatus.textContent = isHost
       ? `Waiting for everyone to ready up. ${getRoomSettingsSummary(data)}`
       : `Mark yourself ready to start. ${getRoomSettingsSummary(data)}`;
@@ -698,12 +707,6 @@ function renderGame(data) {
   elements.scoreLeader.textContent = String(getLeaderScore(data));
   elements.playerCount.textContent = String(players.length);
   elements.secretWord.textContent = secretWord;
-  const meaning = getWordMeaning(secretWord);
-  const meaningText = meaning ? `${meaning} — one-word clue only.` : "One-word clue only.";
-  if (elements.secretWordMeaning) {
-    elements.secretWordMeaning.textContent = meaningText;
-    elements.secretWordMeaning.classList.remove("hidden");
-  }
   if (elements.gameTheme) {
     const category = getRoomCategory(data);
     if (category && category !== "mixed") {
@@ -783,6 +786,7 @@ function buildLobbyReset(data, overrides = {}) {
     lastResult: null,
     roundDeadline: null,
     activeRoster: null,
+    roundReactions: null,
     ...createResetRounds(),
     ...overrides
   };
@@ -808,24 +812,43 @@ function renderReveal(data) {
     }
   }
 
-  elements.revealSecretWord.textContent = data.words?.[(data.round || 1) - 1] || "---";
-  elements.revealScoreMe.textContent = String(data.scores?.[playerId] || 0);
-  elements.revealScoreLeader.textContent = String(getLeaderScore(data));
-  elements.revealCluesList.innerHTML = "";
+  if (elements.revealSecretWord) elements.revealSecretWord.textContent = data.words?.[(data.round || 1) - 1] || "---";
+  if (elements.revealScoreMe) elements.revealScoreMe.textContent = String(data.scores?.[playerId] || 0);
+  if (elements.revealScoreLeader) elements.revealScoreLeader.textContent = String(getLeaderScore(data));
+  if (elements.revealCluesList) elements.revealCluesList.innerHTML = "";
 
   if (result.matched) {
-    elements.resultBadge.className = "result-badge matched";
-    elements.resultBadge.textContent = result.fullMatch ? "FULL TABLE MATCH" : `${result.largestGroupSize}-PLAYER MATCH`;
-    elements.resultPoints.textContent = result.fullMatch
+    if (elements.resultBadge) {
+      elements.resultBadge.className = "result-badge matched";
+      elements.resultBadge.textContent = result.fullMatch ? "FULL TABLE MATCH" : `${result.largestGroupSize}-PLAYER MATCH`;
+    }
+    if (elements.resultPoints) elements.resultPoints.textContent = result.fullMatch
       ? "Everyone thought alike! 🎉"
       : result.bonusApplied
         ? "Great minds think alike! +3 with streak bonus."
         : "You're in sync! +2 points.";
+    const streak = data.streak || 0;
+    if ([3, 5, 10].includes(streak) && streak !== lastStreakMilestoneShown && scoringPlayers.has(playerId)) {
+      lastStreakMilestoneShown = streak;
+      showToast(`${streak} streak! 🔥`, 2000);
+    }
   } else {
-    elements.resultBadge.className = "result-badge no-match";
-    elements.resultBadge.textContent = "NO MATCH";
-    elements.resultPoints.textContent = "No duplicate clues — next round, think as one!";
+    if (elements.resultBadge) {
+      elements.resultBadge.className = "result-badge no-match";
+      elements.resultBadge.textContent = "NO MATCH";
+    }
+    if (elements.resultPoints) elements.resultPoints.textContent = "No duplicate clues — next round, think as one!";
   }
+
+  const matchCount = (result.scoringPlayers && result.scoringPlayers.length) || 0;
+  if (elements.revealRoundSummary) {
+    elements.revealRoundSummary.textContent = result.matched
+      ? `${matchCount} of ${players.length} player${players.length === 1 ? "" : "s"} matched!`
+      : `0 of ${players.length} matched this round.`;
+    elements.revealRoundSummary.classList.remove("hidden");
+  }
+
+  const roundReactions = data.roundReactions || {};
 
   for (const player of players) {
     const card = document.createElement("div");
@@ -836,14 +859,16 @@ function renderReveal(data) {
     if (scoringPlayers.has(player.id)) {
       card.classList.add("matched");
     }
+    const reaction = roundReactions[player.id];
     card.innerHTML = `
       <div class="reveal-player">
         <strong>${escapeHtml(player.name)}</strong>
         <span>${player.id === playerId ? "You" : `Score ${data.scores?.[player.id] || 0}`}</span>
+        ${reaction ? `<span class="reveal-player-reaction" aria-label="Reaction">${reaction}</span>` : ""}
       </div>
       <div class="reveal-clue">${escapeHtml(roundData[player.id] || "No clue")}</div>
     `;
-    elements.revealCluesList.appendChild(card);
+    if (elements.revealCluesList) elements.revealCluesList.appendChild(card);
   }
 
   const isHost = data.hostId === playerId;
@@ -1039,8 +1064,12 @@ function enterRoom() {
     const data = snapshot.val();
     const liveIds = getOrderedPlayerIds(data);
     if (!liveIds.includes(playerId)) {
-      showToast("You were removed from the room.");
-      resetSession();
+      const wasInRoom = currentRoom && getOrderedPlayerIds(currentRoom).includes(playerId);
+      if (wasInRoom) {
+        showToast("You were removed from the room.");
+        resetSession();
+        return;
+      }
       return;
     }
     handleRoomUpdate(data);
@@ -1374,8 +1403,7 @@ async function startGame() {
     return;
   }
   const players = getOrderedPlayers(currentRoom);
-  if (players.length < MIN_PLAYERS) {
-    showToast("Need at least 2 players.");
+  if (players.length < 1) {
     return;
   }
   if (!players.every((player) => player.ready)) {
@@ -1390,7 +1418,7 @@ async function startGame() {
         return room;
       }
       const livePlayers = getOrderedPlayers(room);
-      if (livePlayers.length < MIN_PLAYERS || !livePlayers.every((player) => player.ready)) {
+      if (livePlayers.length < 1 || !livePlayers.every((player) => player.ready)) {
         return room;
       }
 
@@ -1403,6 +1431,7 @@ async function startGame() {
         })
       };
     });
+    lastStreakMilestoneShown = 0;
   } finally {
     setRoomActionState(false);
   }
@@ -1428,7 +1457,8 @@ async function goToNextRound() {
       if ((room.round || 1) >= getRoomTotalRounds(room)) {
         return {
           ...room,
-          status: "gameover"
+          status: "gameover",
+          roundReactions: null
         };
       }
 
@@ -1439,7 +1469,8 @@ async function goToNextRound() {
         resolvedRound: room.round,
         lastResult: null,
         roundDeadline: createRoundDeadline(room),
-        activeRoster: getOrderedPlayerIds(room)
+        activeRoster: getOrderedPlayerIds(room),
+        roundReactions: null
       };
     });
   } finally {
@@ -1745,6 +1776,20 @@ elements.clueInput.addEventListener("keydown", (event) => {
 elements.btnNextRound.addEventListener("click", () => {
   void goToNextRound();
 });
+
+async function setReaction(emoji) {
+  if (!roomRef || !playerId || currentRoom?.status !== "reveal") return;
+  try {
+    await update(roomRef, { [`roundReactions/${playerId}`]: emoji });
+  } catch (_) {}
+}
+
+if (elements.revealReactions) {
+  elements.revealReactions.addEventListener("click", (e) => {
+    const btn = e.target.closest(".btn-reaction");
+    if (btn?.dataset?.reaction) void setReaction(btn.dataset.reaction);
+  });
+}
 
 elements.btnPlayAgain.addEventListener("click", () => {
   void playAgain();
