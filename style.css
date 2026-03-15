@@ -24,6 +24,10 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 html, body {
   height: 100%;
   min-height: 100dvh;
@@ -67,6 +71,18 @@ body {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
+}
+
+#screen-game {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+}
+
+#screen-game .game-body {
+  flex: 1;
+  min-height: 0;
 }
 
 .label {
@@ -527,37 +543,30 @@ body {
   letter-spacing: 0.08em;
 }
 
-.game-header {
+.game-nav {
   position: absolute;
   inset: 0 0 auto 0;
-  padding: 12px 24px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-bottom: 1px solid var(--border);
-}
-
-.game-header-top {
+  padding: 10px 20px 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  z-index: 1;
 }
 
-.game-header-meaning {
-  margin: 0;
-  width: 100%;
-  font-size: 12px;
-  line-height: 1.3;
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.round-info,
-.score-display {
+.game-nav-round {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: 6px;
+}
+
+.game-nav-scores {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .round-num,
@@ -591,13 +600,26 @@ body {
 }
 
 .game-body {
-  width: 100%;
-  max-width: 540px;
-  padding-top: 100px;
+  position: absolute;
+  inset: 0;
+  padding-top: 56px;
+  padding-bottom: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32px;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+}
+
+.game-main {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: 0 16px;
 }
 
 .secret-word-area,
@@ -660,6 +682,8 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  width: 100%;
+  max-width: 480px;
 }
 
 .waiting-anim {
@@ -885,6 +909,7 @@ body {
   font-weight: 700;
   opacity: 0;
   transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 1000;
 }
 
 .toast.show {
@@ -895,6 +920,7 @@ body {
 @media (max-width: 760px) {
   body {
     overflow: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   #app {
@@ -914,10 +940,20 @@ body {
     padding-left: max(16px, env(safe-area-inset-left));
     padding-right: max(16px, env(safe-area-inset-right));
     padding-bottom: max(28px, env(safe-area-inset-bottom));
+    align-items: flex-start;
+    justify-content: flex-start;
   }
 
   .screen.active {
     display: flex;
+  }
+
+  .home-content,
+  .lobby-content,
+  .reveal-content,
+  .final-content {
+    flex: 1;
+    min-width: 0;
   }
 
   .home-content {
@@ -929,27 +965,38 @@ body {
     display: flex;
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
   }
 
-  .home-actions .btn {
+  .home-actions > .btn {
     width: 100%;
     min-height: 48px;
   }
 
   .join-form {
     width: 100%;
+    display: flex;
     flex-direction: column;
+    gap: 10px;
   }
 
   .join-form .code-input,
   .join-form .btn {
     width: 100%;
+    min-height: 48px;
+    box-sizing: border-box;
+  }
+
+  .name-input,
+  .code-input,
+  .clue-field {
+    font-size: 16px; /* prevents iOS zoom on focus */
   }
 
   .lobby-content,
   .reveal-content,
   .final-content {
-    gap: 20px;
+    gap: 18px;
     max-width: 100%;
     width: 100%;
   }
@@ -958,74 +1005,157 @@ body {
     width: 100%;
   }
 
+  .lobby-header-actions {
+    width: 100%;
+    justify-content: center;
+  }
+
   .lobby-settings {
     max-width: 100%;
   }
 
   .lobby-select {
     max-width: 100%;
+    min-height: 44px;
   }
 
-  .game-header {
+  .lobby-content > .btn {
+    width: 100%;
+    min-height: 48px;
+    margin-top: 10px;
+  }
+
+  .lobby-content > #btn-ready {
+    margin-top: 0;
+  }
+
+  .game-nav {
     position: static;
     width: 100%;
     min-width: 0;
-    flex-direction: column;
-    gap: 10px;
-    border-bottom: none;
-    padding: 12px 0 10px;
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 8px 10px;
+    align-items: center;
   }
 
-  .game-header-top {
-    flex-wrap: wrap;
+  .game-nav .btn-leave-in-game {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .game-nav .game-nav-round {
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: center;
+  }
+
+  .game-nav .streak-badge {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .game-nav .game-nav-scores {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
-    justify-content: flex-start;
-  }
-
-  .game-header-top .btn-leave-in-game {
-    order: -1;
-    margin-right: auto;
-  }
-
-  .game-header-meaning {
-    font-size: 11px;
-    line-height: 1.35;
-    word-break: break-word;
+    width: 100%;
   }
 
   .round-num,
   .score-val {
-    font-size: 22px;
+    font-size: 20px;
+  }
+
+  .score-item .label {
+    font-size: 10px;
   }
 
   .game-body {
+    position: static;
     max-width: 100%;
     width: 100%;
     min-width: 0;
-    padding-top: 0;
+    padding: 16px 0 24px;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .game-main {
+    width: 100%;
+    max-width: 100%;
+    padding: 0 12px;
     gap: 24px;
   }
 
   .clue-input-row {
     flex-direction: column;
+    gap: 10px;
   }
 
   .clue-input-row .clue-field,
   .clue-input-row .btn {
     width: 100%;
     min-height: 48px;
+    box-sizing: border-box;
   }
 
   .secret-word-area,
   .reveal-result,
   .reveal-clues-list {
     width: 100%;
+    min-width: 0;
+  }
+
+  .reveal-word-label,
+  .reveal-result {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .reveal-secret {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .final-header,
+  .final-summary,
+  .final-stats {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .final-title,
+  .final-subtitle {
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
 
   .reveal-content .btn-next-round,
-  .reveal-content .btn-ghost {
+  #screen-reveal .btn-ghost {
     width: 100%;
     min-height: 48px;
+    box-sizing: border-box;
+  }
+
+  .reveal-clue-card {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .reveal-clue {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .result-points {
+    word-break: break-word;
+    text-align: center;
   }
 
   .final-actions {
@@ -1038,23 +1168,39 @@ body {
   .final-actions .btn {
     width: 100%;
     min-height: 48px;
+    box-sizing: border-box;
   }
 
   .home-panel,
   .home-help {
     padding: 12px;
     width: 100%;
+    min-width: 0;
+  }
+
+  .home-panel-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .setup-select {
+    min-height: 44px;
   }
 
   .player-slots-grid,
   .reveal-clues-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
+    min-width: 0;
   }
 
-  .lobby-content > .btn {
-    width: 100%;
-    min-height: 48px;
+  .player-slot {
+    min-height: 88px;
+    padding: 12px 10px;
+  }
+
+  .toast {
+    bottom: max(20px, env(safe-area-inset-bottom));
   }
 }
 
@@ -1095,37 +1241,30 @@ body {
     width: 100%;
   }
 
-  .game-header {
-    align-items: stretch;
-    gap: 10px;
+  .game-nav .game-nav-round {
+    font-size: 14px;
   }
 
-  .game-header-top {
-    flex-direction: column;
-    align-items: stretch;
+  .round-num,
+  .score-val {
+    font-size: 18px;
   }
 
-  .game-header-top .btn-leave-in-game {
-    order: 0;
-    margin-right: 0;
-    align-self: flex-start;
-  }
-
-  .score-display {
+  .game-nav .game-nav-scores {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 8px;
     width: 100%;
   }
 
   .score-item,
-  .round-info,
+  .game-nav-round,
   .streak-badge {
     align-items: center;
     justify-content: center;
   }
 
-  .round-info {
+  .game-nav-round {
     width: 100%;
     justify-content: center;
   }
@@ -1144,8 +1283,7 @@ body {
     word-break: break-word;
   }
 
-  .secret-word-meaning,
-  .game-header-meaning {
+  .secret-word-meaning {
     font-size: 12px;
   }
 
@@ -1171,12 +1309,20 @@ body {
   }
 
   .toast {
+    left: 50%;
     width: calc(100% - 24px);
     max-width: 420px;
-    margin-left: 12px;
-    margin-right: 12px;
+    margin-left: 0;
+    margin-right: 0;
+    transform: translateX(-50%) translateY(8px);
     text-align: center;
     white-space: normal;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
   }
 }
 
@@ -1185,6 +1331,7 @@ body {
     padding: 14px 12px 24px;
     padding-left: max(12px, env(safe-area-inset-left));
     padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
   }
 
   .logo-title {

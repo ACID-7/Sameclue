@@ -85,7 +85,6 @@ const elements = {
   streakNum: document.getElementById("streak-num"),
   secretWord: document.getElementById("secret-word"),
   secretWordMeaning: document.getElementById("secret-word-meaning"),
-  gameHeaderMeaning: document.getElementById("game-header-meaning"),
   gameTheme: document.getElementById("game-theme"),
   clueEntry: document.getElementById("clue-entry"),
   clueInput: document.getElementById("clue-input"),
@@ -647,10 +646,6 @@ function renderGame(data) {
   if (elements.secretWordMeaning) {
     elements.secretWordMeaning.textContent = meaningText;
     elements.secretWordMeaning.classList.remove("hidden");
-  }
-  if (elements.gameHeaderMeaning) {
-    elements.gameHeaderMeaning.textContent = meaning ? `Meaning: ${meaning}` : "Give a one-word clue.";
-    elements.gameHeaderMeaning.classList.remove("hidden");
   }
   if (elements.gameTheme) {
     const category = getRoomCategory(data);

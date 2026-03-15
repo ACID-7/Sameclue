@@ -153,54 +153,51 @@
     </div>
 
     <div id="screen-game" class="screen">
-      <div class="game-header">
-        <div class="game-header-top">
-          <button class="btn btn-ghost btn-leave-in-game" id="btn-leave-game" type="button" title="Leave game">Leave</button>
-          <div class="round-info">
-            <span class="label">Round</span>
-            <span id="round-num" class="round-num">1</span>
-            <span class="round-of">/ <span id="round-total">10</span></span>
-          </div>
-
-          <div class="score-display">
-            <div class="score-item">
-              <span class="label">You</span>
-              <span id="score-me" class="score-val">0</span>
-            </div>
-            <div class="score-item">
-              <span class="label">Leader</span>
-              <span id="score-leader" class="score-val">0</span>
-            </div>
-            <div class="score-item">
-              <span class="label">Players</span>
-              <span id="player-count" class="score-val">2</span>
-            </div>
-            <div class="score-item">
-              <span class="label">Timer</span>
-              <span id="round-timer" class="score-val">30</span>
-            </div>
-          </div>
-
-          <div class="streak-badge hidden" id="streak-badge">Streak <span id="streak-num">0</span></div>
+      <nav class="game-nav">
+        <button class="btn btn-ghost btn-leave-in-game" id="btn-leave-game" type="button" title="Leave game">Leave</button>
+        <div class="game-nav-round">
+          <span class="label">Round</span>
+          <span id="round-num" class="round-num">1</span>
+          <span class="round-of">/ <span id="round-total">10</span></span>
         </div>
-        <p class="game-header-meaning hidden" id="game-header-meaning" aria-label="Meaning of the secret word"></p>
-      </div>
+        <div class="game-nav-scores">
+          <div class="score-item">
+            <span class="label">You</span>
+            <span id="score-me" class="score-val">0</span>
+          </div>
+          <div class="score-item">
+            <span class="label">Leader</span>
+            <span id="score-leader" class="score-val">0</span>
+          </div>
+          <div class="score-item">
+            <span class="label">Players</span>
+            <span id="player-count" class="score-val">2</span>
+          </div>
+          <div class="score-item">
+            <span class="label">Timer</span>
+            <span id="round-timer" class="score-val">30</span>
+          </div>
+        </div>
+        <div class="streak-badge hidden" id="streak-badge">Streak <span id="streak-num">0</span></div>
+      </nav>
 
       <div class="game-body">
-        <div class="secret-word-area">
-          <span class="label">Secret Word</span>
-          <div class="secret-word" id="secret-word">---</div>
-          <p class="secret-word-meaning hidden" id="secret-word-meaning" aria-label="Meaning of the word"></p>
-          <span class="game-theme hidden" id="game-theme"></span>
-        </div>
-
-        <div class="clue-entry" id="clue-entry">
-          <label class="label" for="clue-input">Your one-word clue</label>
-          <div class="clue-input-row">
-            <input type="text" id="clue-input" class="clue-field" placeholder="type a clue" maxlength="30" autocomplete="off" autocorrect="off" spellcheck="false" />
-            <button class="btn btn-accent" id="btn-submit-clue">Lock In</button>
+        <div class="game-main">
+          <div class="secret-word-area">
+            <span class="label">Secret Word</span>
+            <div class="secret-word" id="secret-word">---</div>
+            <p class="secret-word-meaning hidden" id="secret-word-meaning" aria-label="Meaning of the word"></p>
+            <span class="game-theme hidden" id="game-theme"></span>
           </div>
-          <div class="clue-rules">One word only. Do not use the secret word.</div>
+
+          <div class="clue-entry" id="clue-entry">
+            <label class="label" for="clue-input">Your one-word clue</label>
+            <div class="clue-input-row">
+              <input type="text" id="clue-input" class="clue-field" placeholder="type a clue" maxlength="30" autocomplete="off" autocorrect="off" spellcheck="false" />
+              <button class="btn btn-accent" id="btn-submit-clue">Lock In</button>
+            </div>
+            <div class="clue-rules">One word only. Do not use the secret word.</div>
+          </div>
         </div>
 
         <div class="waiting-panel hidden" id="waiting-panel">
