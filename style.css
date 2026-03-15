@@ -20,8 +20,13 @@
   --font-mono: "DM Mono", monospace;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 html, body {
   height: 100%;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-main);
@@ -29,11 +34,13 @@ html, body {
 
 body {
   overflow: hidden;
+  overflow-x: hidden;
 }
 
 #app {
   position: relative;
   width: 100%;
+  min-width: 0;
   height: 100%;
 }
 
@@ -44,7 +51,11 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   opacity: 0;
   pointer-events: none;
@@ -187,6 +198,8 @@ body {
 
 .home-content {
   max-width: 380px;
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -439,6 +452,7 @@ body {
 
 .lobby-select {
   width: 100%;
+  min-width: 0;
   max-width: 280px;
   padding: 10px 12px;
   font-size: 14px;
@@ -897,42 +911,150 @@ body {
     display: none;
     pointer-events: auto;
     padding: 20px 16px 28px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
   }
 
   .screen.active {
     display: flex;
   }
 
-  .game-header {
-    position: static;
-    width: 100%;
-    flex-direction: column;
-    gap: 16px;
-    border-bottom: none;
-    padding: 0 0 12px;
+  .home-content {
+    max-width: 100%;
   }
 
-  .game-body {
-    max-width: 100%;
-    padding-top: 0;
-    gap: 24px;
+  .home-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .home-actions .btn {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .join-form {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .join-form .code-input,
+  .join-form .btn {
+    width: 100%;
   }
 
   .lobby-content,
   .reveal-content,
-  .final-content,
-  .home-content {
+  .final-content {
     gap: 20px;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .lobby-header {
+    width: 100%;
+  }
+
+  .lobby-settings {
+    max-width: 100%;
+  }
+
+  .lobby-select {
+    max-width: 100%;
+  }
+
+  .game-header {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    gap: 10px;
+    border-bottom: none;
+    padding: 12px 0 10px;
+  }
+
+  .game-header-top {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+
+  .game-header-top .btn-leave-in-game {
+    order: -1;
+    margin-right: auto;
+  }
+
+  .game-header-meaning {
+    font-size: 11px;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .round-num,
+  .score-val {
+    font-size: 22px;
+  }
+
+  .game-body {
+    max-width: 100%;
+    width: 100%;
+    min-width: 0;
+    padding-top: 0;
+    gap: 24px;
+  }
+
+  .clue-input-row {
+    flex-direction: column;
+  }
+
+  .clue-input-row .clue-field,
+  .clue-input-row .btn {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .secret-word-area,
+  .reveal-result,
+  .reveal-clues-list {
+    width: 100%;
+  }
+
+  .reveal-content .btn-next-round,
+  .reveal-content .btn-ghost {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .final-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .final-actions .btn {
+    width: 100%;
+    min-height: 48px;
   }
 
   .home-panel,
   .home-help {
     padding: 12px;
+    width: 100%;
   }
 
   .player-slots-grid,
   .reveal-clues-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .lobby-content > .btn {
+    width: 100%;
+    min-height: 48px;
   }
 }
 
@@ -944,13 +1066,22 @@ body {
     max-width: 100%;
   }
 
+  .logo-title {
+    font-size: 36px;
+  }
+
+  .logo-badge {
+    width: 48px;
+    height: 48px;
+    font-size: 14px;
+  }
+
   .player-slots-grid,
   .reveal-clues-list {
     grid-template-columns: 1fr;
   }
 
   .join-form,
-  .clue-input-row,
   .reveal-scores,
   .final-summary,
   .final-stats,
@@ -960,15 +1091,30 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .lobby-meta {
+    width: 100%;
+  }
+
   .game-header {
     align-items: stretch;
-    gap: 12px;
+    gap: 10px;
+  }
+
+  .game-header-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .game-header-top .btn-leave-in-game {
+    order: 0;
+    margin-right: 0;
+    align-self: flex-start;
   }
 
   .score-display {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 10px;
     width: 100%;
   }
 
@@ -984,22 +1130,29 @@ body {
     justify-content: center;
   }
 
-  .score-display {
-    gap: 12px;
-  }
-
   .room-code-display {
     width: 100%;
     text-align: center;
-    font-size: 28px;
+    font-size: 24px;
     letter-spacing: 0.12em;
-    padding: 14px 12px;
+    padding: 12px 10px;
   }
 
   .secret-word,
   .reveal-secret {
-    font-size: clamp(34px, 14vw, 54px);
+    font-size: clamp(32px, 12vw, 48px);
     word-break: break-word;
+  }
+
+  .secret-word-meaning,
+  .game-header-meaning {
+    font-size: 12px;
+  }
+
+  .result-badge {
+    font-size: 14px;
+    padding: 6px 14px;
+    text-align: center;
   }
 
   .reveal-clue-card,
@@ -1013,10 +1166,55 @@ body {
     gap: 8px;
   }
 
+  .final-title {
+    font-size: 28px;
+  }
+
   .toast {
     width: calc(100% - 24px);
     max-width: 420px;
+    margin-left: 12px;
+    margin-right: 12px;
     text-align: center;
     white-space: normal;
+  }
+}
+
+@media (max-width: 380px) {
+  .screen.active {
+    padding: 14px 12px 24px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  .logo-title {
+    font-size: 30px;
+  }
+
+  .home-panel-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .round-num,
+  .score-val {
+    font-size: 20px;
+  }
+
+  .room-code-display {
+    font-size: 20px;
+    letter-spacing: 0.08em;
+  }
+
+  .btn {
+    padding: 12px 18px;
+    font-size: 13px;
+  }
+
+  .meta-pill,
+  .summary-card,
+  .player-slot,
+  .reveal-clue-card {
+    padding: 12px 14px;
   }
 }
