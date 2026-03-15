@@ -62,6 +62,26 @@
                 <option value="60000">60s</option>
               </select>
             </label>
+            <label class="setup-item">
+              <span class="label">Players</span>
+              <select id="settings-max-players" class="setup-select" title="Max players in room (2–16)">
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+                <option value="11">11</option>
+                <option value="12">12</option>
+                <option value="13">13</option>
+                <option value="14">14</option>
+                <option value="15">15</option>
+                <option value="16" selected>16</option>
+              </select>
+            </label>
             <label class="setup-item setup-item-full">
               <span class="label">Word theme</span>
               <select id="settings-category" class="setup-select" title="Word category for this game">
@@ -123,6 +143,11 @@
           </div>
         </div>
 
+        <div class="lobby-ready-row">
+          <button class="btn btn-outline" id="btn-ready">Ready Up</button>
+          <button class="btn btn-primary hidden" id="btn-start">Start Game</button>
+        </div>
+
         <div class="lobby-settings">
           <label class="lobby-setting-item">
             <span class="label">Word theme</span>
@@ -146,8 +171,6 @@
 
         <div class="player-slots-grid" id="player-slots"></div>
         <div id="lobby-status" class="lobby-status">Share the room code to fill the lobby.</div>
-        <button class="btn btn-outline" id="btn-ready">Ready Up</button>
-        <button class="btn btn-primary hidden" id="btn-start">Start Game</button>
         <button class="btn btn-ghost" id="btn-leave-lobby">Leave</button>
       </div>
     </div>

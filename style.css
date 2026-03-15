@@ -448,6 +448,25 @@ body {
   text-align: center;
 }
 
+.lobby-ready-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  width: 100%;
+  max-width: 520px;
+}
+
+.lobby-ready-row .btn {
+  min-width: 140px;
+}
+
+.player-slot .btn-kick {
+  margin-top: 4px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
 .lobby-settings {
   width: 100%;
   max-width: 520px;
@@ -633,6 +652,10 @@ body {
   font-size: clamp(42px, 10vw, 72px);
   font-weight: 800;
   letter-spacing: -0.03em;
+}
+
+#screen-game .secret-word {
+  font-size: clamp(24px, 5vw, 36px);
 }
 
 .secret-word-meaning {

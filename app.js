@@ -37,9 +37,11 @@ const MAX_ROUND_DURATION_MS = 60000;
 const ROUND_KEYS_LIMIT = 25;
 const PLAYER_NAME_KEY = "sameclue-player-name";
 const LAST_ROOM_CODE_KEY = "sameclue-last-room-code";
+const ROOM_SESSION_KEY = "sameclue-room-session";
 const SETTINGS_ROUNDS_KEY = "sameclue-setting-rounds";
 const SETTINGS_TIMER_KEY = "sameclue-setting-timer";
 const SETTINGS_CATEGORY_KEY = "sameclue-setting-category";
+const SETTINGS_MAX_PLAYERS_KEY = "sameclue-setting-max-players";
 const DEFAULT_CATEGORY = "all";
 const LAST_SWEEP_KEY = "sameclue-last-room-sweep";
 const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
@@ -68,6 +70,7 @@ const elements = {
   settingsRounds: document.getElementById("settings-rounds"),
   settingsTimer: document.getElementById("settings-timer"),
   settingsCategory: document.getElementById("settings-category"),
+  settingsMaxPlayers: document.getElementById("settings-max-players"),
   toast: document.getElementById("toast"),
   lobbyStatus: document.getElementById("lobby-status"),
   lobbyPlayerCount: document.getElementById("lobby-player-count"),
@@ -201,19 +204,33 @@ function getRoomRoundDuration(data) {
   return sanitizeRoundDuration(data?.settings?.roundDurationMs ?? DEFAULT_ROUND_DURATION_MS);
 }
 
+function sanitizeMaxPlayers(value) {
+  return clampNumber(value, MIN_PLAYERS, MAX_PLAYERS, MAX_PLAYERS);
+}
+
+function getRoomMaxPlayers(data) {
+  return sanitizeMaxPlayers(data?.settings?.maxPlayers ?? MAX_PLAYERS);
+}
+
 function getSelectedSettings() {
   const totalRounds = sanitizeTotalRounds(elements.settingsRounds.value);
   const roundDurationMs = sanitizeRoundDuration(elements.settingsTimer.value);
   const category = (elements.settingsCategory?.value || DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
   const validCategory = CATEGORY_OPTIONS.some((opt) => opt.value === category) ? category : DEFAULT_CATEGORY;
-  return { totalRounds, roundDurationMs, category: validCategory };
+  const maxPlayers = elements.settingsMaxPlayers
+    ? sanitizeMaxPlayers(elements.settingsMaxPlayers.value)
+    : MAX_PLAYERS;
+  return { totalRounds, roundDurationMs, category: validCategory, maxPlayers };
 }
 
-function setSettingsUI({ totalRounds, roundDurationMs, category }) {
+function setSettingsUI({ totalRounds, roundDurationMs, category, maxPlayers }) {
   elements.settingsRounds.value = String(sanitizeTotalRounds(totalRounds));
   elements.settingsTimer.value = String(sanitizeRoundDuration(roundDurationMs));
   if (elements.settingsCategory) {
     elements.settingsCategory.value = category || DEFAULT_CATEGORY;
+  }
+  if (elements.settingsMaxPlayers) {
+    elements.settingsMaxPlayers.value = String(sanitizeMaxPlayers(maxPlayers ?? MAX_PLAYERS));
   }
 }
 
@@ -222,6 +239,7 @@ function saveSettings() {
   window.localStorage.setItem(SETTINGS_ROUNDS_KEY, String(settings.totalRounds));
   window.localStorage.setItem(SETTINGS_TIMER_KEY, String(settings.roundDurationMs));
   window.localStorage.setItem(SETTINGS_CATEGORY_KEY, String(settings.category));
+  window.localStorage.setItem(SETTINGS_MAX_PLAYERS_KEY, String(settings.maxPlayers));
   return settings;
 }
 
@@ -230,7 +248,8 @@ function loadSettings() {
   const roundDurationMs = sanitizeRoundDuration(window.localStorage.getItem(SETTINGS_TIMER_KEY) || DEFAULT_ROUND_DURATION_MS);
   const category = (window.localStorage.getItem(SETTINGS_CATEGORY_KEY) || DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
   const validCategory = CATEGORY_OPTIONS.some((opt) => opt.value === category) ? category : DEFAULT_CATEGORY;
-  const settings = { totalRounds, roundDurationMs, category: validCategory };
+  const maxPlayers = sanitizeMaxPlayers(window.localStorage.getItem(SETTINGS_MAX_PLAYERS_KEY) || MAX_PLAYERS);
+  const settings = { totalRounds, roundDurationMs, category: validCategory, maxPlayers };
   setSettingsUI(settings);
   return settings;
 }
@@ -240,6 +259,30 @@ function saveLastRoomCode(code) {
     window.localStorage.setItem(LAST_ROOM_CODE_KEY, code);
     refreshQuickJoinButton();
   }
+}
+
+function saveRoomSession(code, pid) {
+  if (code && pid) {
+    try {
+      window.localStorage.setItem(ROOM_SESSION_KEY, JSON.stringify({ roomCode: code, playerId: pid }));
+    } catch (_) {}
+  }
+}
+
+function clearRoomSession() {
+  try {
+    window.localStorage.removeItem(ROOM_SESSION_KEY);
+  } catch (_) {}
+}
+
+function getRoomSession() {
+  try {
+    const raw = window.localStorage.getItem(ROOM_SESSION_KEY);
+    if (!raw) return null;
+    const { roomCode, playerId } = JSON.parse(raw);
+    if (roomCode && playerId) return { roomCode: String(roomCode).trim().toUpperCase(), playerId: String(playerId) };
+  } catch (_) {}
+  return null;
 }
 
 function getLastRoomCode() {
@@ -324,6 +367,7 @@ function setRoomActionState(isBusy) {
     elements.settingsRounds,
     elements.settingsTimer,
     elements.settingsCategory,
+    elements.settingsMaxPlayers,
     elements.lobbyCategory
   ].forEach((button) => {
     if (button) {
@@ -352,7 +396,14 @@ function getRoundKey(round) {
 }
 
 function getOrderedPlayerIds(data) {
-  return Array.isArray(data.playerOrder) ? data.playerOrder.filter((id) => data.players?.[id]) : [];
+  const order = Array.isArray(data.playerOrder) ? data.playerOrder : [];
+  const byOrder = order.filter((id) => data.players?.[id]);
+  const allPlayerIds = new Set([...byOrder, ...Object.keys(data.players || {})]);
+  const ordered = [...byOrder];
+  for (const id of allPlayerIds) {
+    if (!ordered.includes(id)) ordered.push(id);
+  }
+  return ordered;
 }
 
 function getOrderedPlayers(data) {
@@ -548,6 +599,7 @@ function resetSession() {
   evaluationInFlight = false;
   submitInFlight = false;
   elements.clueInput.value = "";
+  clearRoomSession();
   refreshQuickJoinButton();
   showScreen("screen-home");
 }
@@ -563,8 +615,9 @@ function renderLobby(data) {
   const allReady = players.length >= MIN_PLAYERS && players.every((player) => player.ready);
   const meReady = Boolean(data.players?.[playerId]?.ready);
 
+  const maxPlayers = getRoomMaxPlayers(data);
   elements.displayRoomCode.textContent = roomCode;
-  elements.lobbyPlayerCount.textContent = `${players.length} / ${MAX_PLAYERS}`;
+  elements.lobbyPlayerCount.textContent = `${players.length} / ${maxPlayers}`;
   elements.lobbyHostLabel.textContent = hostName;
   elements.playerSlots.innerHTML = "";
 
@@ -580,16 +633,20 @@ function renderLobby(data) {
     if (player.ready) {
       card.classList.add("ready");
     }
+    const kickBtn = isHost && player.id !== playerId
+      ? `<button type="button" class="btn btn-ghost btn-kick" data-player-id="${escapeHtml(player.id)}" title="Kick player">Kick</button>`
+      : "";
     card.innerHTML = `
       <div class="slot-dot"></div>
       <strong>${escapeHtml(player.name)}</strong>
       <span class="slot-role">${player.id === playerId ? "You" : "Joined"}${player.id === data.hostId ? " | Host" : ""}</span>
       <span class="slot-state">${player.ready ? "Ready" : "Waiting"}</span>
+      ${kickBtn}
     `;
     elements.playerSlots.appendChild(card);
   }
 
-  for (let index = players.length; index < MAX_PLAYERS; index += 1) {
+  for (let index = players.length; index < maxPlayers; index += 1) {
     const empty = document.createElement("div");
     empty.className = "player-slot empty";
     empty.innerHTML = `
@@ -707,6 +764,7 @@ function buildLobbyReset(data, overrides = {}) {
   const roundDurationMs = getRoomRoundDuration(data);
 
   const category = getRoomCategory(data);
+  const maxPlayers = getRoomMaxPlayers(data);
   return {
     status: "lobby",
     round: 1,
@@ -714,7 +772,8 @@ function buildLobbyReset(data, overrides = {}) {
     settings: {
       totalRounds,
       roundDurationMs,
-      category
+      category,
+      maxPlayers
     },
     scores,
     streak: 0,
@@ -921,14 +980,12 @@ function handleRoomUpdate(data) {
   const livePlayers = getOrderedPlayerIds(data);
   void registerDisconnectCleanup();
 
-  const activeRoster = Array.isArray(data.activeRoster) ? data.activeRoster : [];
-  const rosterChanged = activeRoster.length > 0 && activeRoster.some((id) => !livePlayers.includes(id));
   if (data.hostId && !livePlayers.includes(data.hostId) && livePlayers.length > 0 && playerId === livePlayers[0]) {
     void update(roomRef, { hostId: livePlayers[0] });
     return;
   }
 
-  if ((data.status === "playing" || data.status === "reveal") && (livePlayers.length < MIN_PLAYERS || rosterChanged)) {
+  if ((data.status === "playing" || data.status === "reveal") && livePlayers.length < MIN_PLAYERS) {
     if (livePlayers.length > 0 && playerId === livePlayers[0]) {
       const remainingPlayers = Object.fromEntries(
         livePlayers.map((id) => [id, data.players[id]])
@@ -979,7 +1036,14 @@ function enterRoom() {
       resetSession();
       return;
     }
-    handleRoomUpdate(snapshot.val());
+    const data = snapshot.val();
+    const liveIds = getOrderedPlayerIds(data);
+    if (!liveIds.includes(playerId)) {
+      showToast("You were removed from the room.");
+      resetSession();
+      return;
+    }
+    handleRoomUpdate(data);
   });
 }
 
@@ -1048,7 +1112,7 @@ async function createRoom() {
         scores: { [playerId]: 0 },
         round: 1,
         words: getWordList(settings.totalRounds, settings.category || DEFAULT_CATEGORY),
-        settings,
+        settings: { ...settings, maxPlayers: settings.maxPlayers ?? MAX_PLAYERS },
           streak: 0,
           bestStreak: 0,
           totalMatches: 0,
@@ -1063,6 +1127,7 @@ async function createRoom() {
         roomCode = candidateCode;
         roomRef = candidateRef;
         saveLastRoomCode(roomCode);
+        saveRoomSession(roomCode, playerId);
         enterRoom();
         return;
       }
@@ -1102,7 +1167,8 @@ async function joinRoomByCode(rawCode) {
       showToast("This room has already started.");
       return;
     }
-    if (playerOrder.length >= MAX_PLAYERS) {
+    const roomMaxPlayers = getRoomMaxPlayers(data);
+    if (playerOrder.length >= roomMaxPlayers) {
       showToast("This room is full.");
       return;
     }
@@ -1113,8 +1179,9 @@ async function joinRoomByCode(rawCode) {
         return room;
       }
 
+      const roomMax = getRoomMaxPlayers(room);
       const liveOrder = Array.isArray(room.playerOrder) ? room.playerOrder.filter((id) => room.players?.[id]) : [];
-      if (liveOrder.length >= MAX_PLAYERS) {
+      if (liveOrder.length >= roomMax) {
         return room;
       }
 
@@ -1148,6 +1215,7 @@ async function joinRoomByCode(rawCode) {
     roomCode = code;
     roomRef = joinRef;
     saveLastRoomCode(roomCode);
+    saveRoomSession(roomCode, playerId);
     enterRoom();
   } finally {
     setRoomActionState(false);
@@ -1217,8 +1285,7 @@ async function leaveRoom() {
       updates[`${getRoundKey(round)}/${playerId}`] = null;
     }
 
-    const activeGame = data.status === "playing" || data.status === "reveal";
-    if (activeGame || remainingOrder.length < MIN_PLAYERS) {
+    if (remainingOrder.length < MIN_PLAYERS) {
       const remainingPlayersData = remainingOrder.reduce((acc, id) => {
         acc[id] = data.players[id];
         return acc;
@@ -1453,6 +1520,51 @@ async function updateLobbyCategory(newCategory) {
   }
 }
 
+async function kickPlayer(targetPlayerId) {
+  if (roomActionInFlight || !currentRoom || currentRoom.hostId !== playerId || !roomRef || targetPlayerId === playerId) {
+    return;
+  }
+  setRoomActionState(true);
+  try {
+    const snapshot = await get(roomRef);
+    if (!snapshot.exists()) return;
+    const data = snapshot.val();
+    const playerOrder = getOrderedPlayerIds(data);
+    if (!playerOrder.includes(targetPlayerId) || data.hostId !== playerId) return;
+
+    const remainingOrder = playerOrder.filter((id) => id !== targetPlayerId);
+    const updates = {
+      [`players/${targetPlayerId}`]: null,
+      [`scores/${targetPlayerId}`]: null,
+      playerOrder: remainingOrder
+    };
+    if (data.hostId === targetPlayerId) {
+      updates.hostId = remainingOrder[0];
+    }
+    for (let round = 1; round <= ROUND_KEYS_LIMIT; round += 1) {
+      updates[`${getRoundKey(round)}/${targetPlayerId}`] = null;
+    }
+    if (remainingOrder.length < MIN_PLAYERS) {
+      const remainingPlayersData = remainingOrder.reduce((acc, id) => {
+        acc[id] = data.players[id];
+        return acc;
+      }, {});
+      Object.assign(updates, buildLobbyReset({
+        ...data,
+        hostId: updates.hostId || data.hostId,
+        playerOrder: remainingOrder,
+        players: remainingPlayersData
+      }));
+    }
+    await update(roomRef, updates);
+    showToast("Player removed from room.");
+  } catch {
+    showToast("Could not kick player. Try again.");
+  } finally {
+    setRoomActionState(false);
+  }
+}
+
 async function toggleReady() {
   if (roomActionInFlight || !currentRoom || currentRoom.status !== "lobby" || !playerId) {
     return;
@@ -1531,6 +1643,11 @@ if (elements.settingsCategory) {
     saveSettings();
   });
 }
+if (elements.settingsMaxPlayers) {
+  elements.settingsMaxPlayers.addEventListener("change", () => {
+    saveSettings();
+  });
+}
 
 elements.btnRandomName.addEventListener("click", () => {
   elements.playerName.value = randomPlayerName();
@@ -1582,6 +1699,13 @@ elements.btnShareCode.addEventListener("click", () => {
 
 elements.btnReady.addEventListener("click", () => {
   void toggleReady();
+});
+
+elements.playerSlots.addEventListener("click", (e) => {
+  const btn = e.target.closest(".btn-kick");
+  if (btn?.dataset?.playerId) {
+    void kickPlayer(btn.dataset.playerId);
+  }
 });
 
 elements.btnStart.addEventListener("click", () => {
@@ -1636,4 +1760,14 @@ window.addEventListener("pagehide", () => {
   }
 });
 
+function tryRestoreRoomSession() {
+  const session = getRoomSession();
+  if (!session?.roomCode || !session?.playerId) return;
+  roomCode = session.roomCode;
+  playerId = session.playerId;
+  roomRef = ref(db, `rooms/${roomCode}`);
+  enterRoom();
+}
+
 void cleanupOrphanRooms();
+tryRestoreRoomSession();
