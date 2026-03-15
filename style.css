@@ -419,6 +419,42 @@ body {
   text-align: center;
 }
 
+.lobby-settings {
+  width: 100%;
+  max-width: 520px;
+}
+
+.lobby-setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lobby-setting-item .label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.lobby-select {
+  width: 100%;
+  max-width: 280px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-main);
+}
+
+.lobby-select:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
 .player-slots-grid {
   width: 100%;
   display: grid;

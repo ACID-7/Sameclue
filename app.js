@@ -72,6 +72,7 @@ const elements = {
   lobbyStatus: document.getElementById("lobby-status"),
   lobbyPlayerCount: document.getElementById("lobby-player-count"),
   lobbyHostLabel: document.getElementById("lobby-host-label"),
+  lobbyCategory: document.getElementById("lobby-category"),
   displayRoomCode: document.getElementById("display-room-code"),
   playerSlots: document.getElementById("player-slots"),
   roundNum: document.getElementById("round-num"),
@@ -321,9 +322,10 @@ function setRoomActionState(isBusy) {
     elements.btnPlayAgain,
     elements.btnLeaveLobby,
     elements.btnReady,
-  elements.settingsRounds,
-  elements.settingsTimer,
-  elements.settingsCategory
+    elements.settingsRounds,
+    elements.settingsTimer,
+    elements.settingsCategory,
+    elements.lobbyCategory
   ].forEach((button) => {
     if (button) {
       if (button === elements.btnQuickJoin && !isBusy) {
@@ -613,6 +615,13 @@ function renderLobby(data) {
   elements.btnReady.textContent = meReady ? "Unready" : "Ready Up";
   elements.btnReady.classList.toggle("hidden", false);
   elements.btnStart.classList.toggle("hidden", !(isHost && allReady));
+
+  if (elements.lobbyCategory) {
+    const category = getRoomCategory(data);
+    elements.lobbyCategory.value = category || DEFAULT_CATEGORY;
+    elements.lobbyCategory.disabled = !isHost;
+    elements.lobbyCategory.title = isHost ? "Change word theme before starting" : "Only the host can change the theme";
+  }
 }
 
 function renderGame(data) {
@@ -1427,6 +1436,28 @@ async function playAgain() {
   }
 }
 
+async function updateLobbyCategory(newCategory) {
+  if (!currentRoom || currentRoom.hostId !== playerId || currentRoom.status !== "lobby") {
+    return;
+  }
+  const valid = CATEGORY_OPTIONS.some((opt) => opt.value === newCategory);
+  if (!valid) return;
+  setRoomActionState(true);
+  try {
+    await update(roomRef, {
+      settings: {
+        ...currentRoom.settings,
+        category: newCategory
+      }
+    });
+    showToast("Word theme updated.");
+  } catch {
+    showToast("Could not update theme. Try again.");
+  } finally {
+    setRoomActionState(false);
+  }
+}
+
 async function toggleReady() {
   if (roomActionInFlight || !currentRoom || currentRoom.status !== "lobby" || !playerId) {
     return;
@@ -1561,6 +1592,12 @@ elements.btnReady.addEventListener("click", () => {
 elements.btnStart.addEventListener("click", () => {
   void startGame();
 });
+
+if (elements.lobbyCategory) {
+  elements.lobbyCategory.addEventListener("change", () => {
+    void updateLobbyCategory(elements.lobbyCategory.value);
+  });
+}
 
 elements.btnLeaveLobby.addEventListener("click", () => {
   void leaveRoom();
